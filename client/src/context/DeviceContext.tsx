@@ -43,7 +43,18 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsLoading(true);
       setError(null);
       const data = await api.getDevices();
-      setDevices(data);
+      setDevices((prev) => {
+        const prevMap = new Map(prev.map((d) => [d.id, d]));
+        return data.map((d) => {
+          const p = prevMap.get(d.id);
+          return {
+            ...d,
+            todayBytesTotal: Math.max(d.todayBytesTotal || 0, p?.todayBytesTotal || 0),
+            currentDownloadBps: p?.currentDownloadBps ?? d.currentDownloadBps,
+            currentUploadBps: p?.currentUploadBps ?? d.currentUploadBps,
+          };
+        });
+      });
     } catch (err: any) {
       setError(err.message || 'Failed to fetch devices');
     } finally {
@@ -77,28 +88,52 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   React.useEffect(() => {
     const unsubscribe = addListener('devices_updated', (data: any) => {
       if (data?.devices && Array.isArray(data.devices)) {
-        setDevices(data.devices);
+        setDevices((prev) => {
+          const prevMap = new Map(prev.map((d) => [d.id, d]));
+          return data.devices.map((d: Device) => {
+            const p = prevMap.get(d.id);
+            return {
+              ...d,
+              todayBytesTotal: Math.max(d.todayBytesTotal || 0, p?.todayBytesTotal || 0),
+            };
+          });
+        });
       }
     });
     return unsubscribe;
   }, [addListener]);
 
-  // Update live speeds from WebSocket tick
+  // Update live speeds and accumulate bytes from WebSocket tick
   React.useEffect(() => {
     if (!latestTick?.deviceSpeeds) return;
     setDevices((prev) =>
       prev.map((dev) => {
         const speed = latestTick.deviceSpeeds[dev.id];
         if (speed) {
+          const delta = (speed.downBps || 0) + (speed.upBps || 0);
           return {
             ...dev,
             currentDownloadBps: speed.downBps,
             currentUploadBps: speed.upBps,
+            todayBytesTotal: (dev.todayBytesTotal || 0) + delta,
           };
         }
         return dev;
       })
     );
+
+    // Also sync selectedDevice if open
+    setSelectedDevice((prev) => {
+      if (!prev || !latestTick.deviceSpeeds[prev.id]) return prev;
+      const speed = latestTick.deviceSpeeds[prev.id];
+      const delta = (speed.downBps || 0) + (speed.upBps || 0);
+      return {
+        ...prev,
+        currentDownloadBps: speed.downBps,
+        currentUploadBps: speed.upBps,
+        todayBytesTotal: (prev.todayBytesTotal || 0) + delta,
+      };
+    });
   }, [latestTick]);
 
   // Listen for new device joined broadcast

@@ -26,11 +26,13 @@ import { cn } from '../../lib/utils';
 export interface OverviewViewProps {
   onSelectDevice: (deviceId: string) => void;
   onNavigateTab: (tab: string) => void;
+  onOpenFullDetails?: (deviceId: string) => void;
 }
 
 export const OverviewView: React.FC<OverviewViewProps> = ({
   onSelectDevice,
   onNavigateTab,
+  onOpenFullDetails,
 }) => {
   const { devices, pauseDevice, resumeDevice, isScanning, scanNetwork } = useDevices();
   const { latestTick, addListener } = useWebSocket();

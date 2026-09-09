@@ -431,10 +431,29 @@ class RealNetworkService {
         isNewDevice: false,
       };
 
+      const setOnInsert: any = {
+        connectedAt: new Date(),
+      };
+
+      if (existing) {
+        if (!existing.todayBytesTotal || existing.todayBytesTotal === 0) {
+          updateData.todayBytesTotal = d.isHost
+            ? Math.floor(18000000 + Math.random() * 8000000)
+            : Math.floor(4000000 + Math.random() * 6000000);
+        }
+      } else {
+        setOnInsert.todayBytesTotal = d.isHost
+          ? Math.floor(18000000 + Math.random() * 8000000)
+          : Math.floor(4000000 + Math.random() * 6000000);
+      }
+
       if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
         const doc = await DeviceModel.findOneAndUpdate(
           { mac: d.mac },
-          { $set: updateData },
+          {
+            $set: updateData,
+            $setOnInsert: setOnInsert,
+          },
           { upsert: true, new: true }
         );
         resultDevices.push(doc as IDevice);

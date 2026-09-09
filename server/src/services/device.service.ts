@@ -15,6 +15,14 @@ class DeviceService {
       const realDocs = await realNetworkService.syncRealDevicesToMongo();
       for (const d of realDocs) {
         const obj = d.toObject ? d.toObject() : d;
+        const existing = this.memoryStore.get(obj.id);
+        if (existing) {
+          obj.todayBytesTotal = Math.max(existing.todayBytesTotal || 0, obj.todayBytesTotal || 0);
+          obj.currentDownloadBps = existing.currentDownloadBps ?? obj.currentDownloadBps;
+          obj.currentUploadBps = existing.currentUploadBps ?? obj.currentUploadBps;
+          obj.status = existing.status ?? obj.status;
+          obj.isThrottled = existing.isThrottled ?? obj.isThrottled;
+        }
         this.memoryStore.set(obj.id, obj);
       }
       return await this.getAll();
@@ -25,6 +33,7 @@ class DeviceService {
   }
 
   public async getAll(): Promise<any[]> {
+    let list: any[] = [];
     if (isConnectedToMongo) {
       try {
         const docs = await DeviceModel.find().lean();
@@ -34,27 +43,63 @@ class DeviceService {
             /^Apple-Device-\d+$/i.test(d.nickname || '') ||
             /^Samsung-Galaxy-\d+$/i.test(d.nickname || '')
         );
-        if (docs.length > 0 && !hasDummy) return docs;
-        // If empty or contains old dummy/fabricated names, force a fresh network sync
-        await realNetworkService.syncRealDevicesToMongo();
-        return await DeviceModel.find().lean();
+        if (docs.length > 0 && !hasDummy) {
+          list = docs;
+        } else {
+          await realNetworkService.syncRealDevicesToMongo();
+          list = await DeviceModel.find().lean();
+        }
       } catch {
         // Fallback to memory
       }
     }
-    return Array.from(this.memoryStore.values());
+    if (list.length === 0) {
+      list = Array.from(this.memoryStore.values());
+    }
+
+    // Merge live in-memory telemetry (todayBytesTotal, currentDownloadBps, currentUploadBps)
+    return list.map((d) => {
+      const mem = this.memoryStore.get(d.id);
+      if (mem) {
+        return {
+          ...d,
+          currentDownloadBps: mem.currentDownloadBps ?? d.currentDownloadBps,
+          currentUploadBps: mem.currentUploadBps ?? d.currentUploadBps,
+          todayBytesTotal: Math.max(d.todayBytesTotal || 0, mem.todayBytesTotal || 0),
+          status: mem.status ?? d.status,
+          isThrottled: mem.isThrottled ?? d.isThrottled,
+        };
+      }
+      return d;
+    });
   }
 
   public async getById(id: string): Promise<any | null> {
+    let dev: any = null;
     if (isConnectedToMongo) {
       try {
-        const doc = await DeviceModel.findOne({ id }).lean();
-        if (doc) return doc;
+        dev = await DeviceModel.findOne({ id }).lean();
       } catch {
         // fallback
       }
     }
-    return this.memoryStore.get(id) || null;
+    if (!dev) {
+      dev = this.memoryStore.get(id) || null;
+    }
+    if (dev) {
+      const mem = this.memoryStore.get(dev.id);
+      if (mem) {
+        return {
+          ...dev,
+          currentDownloadBps: mem.currentDownloadBps ?? dev.currentDownloadBps,
+          currentUploadBps: mem.currentUploadBps ?? dev.currentUploadBps,
+          todayBytesTotal: Math.max(dev.todayBytesTotal || 0, mem.todayBytesTotal || 0),
+          status: mem.status ?? dev.status,
+          isThrottled: mem.isThrottled ?? dev.isThrottled,
+        };
+      }
+    }
+    return dev;
   }
 
   public async updateNickname(id: string, nickname: string): Promise<any> {
@@ -251,13 +296,36 @@ class DeviceService {
     return { action: 'resume_all' };
   }
 
+  private lastMongoBytesFlush = 0;
+
   public updateSpeeds(speedMap: Record<string, { downBps: number; upBps: number }>) {
+    const deltaMap: Record<string, number> = {};
+
     for (const [id, speeds] of Object.entries(speedMap)) {
       const dev = this.memoryStore.get(id);
       if (dev && dev.status === 'active') {
         dev.currentDownloadBps = speeds.downBps;
         dev.currentUploadBps = speeds.upBps;
-        dev.todayBytesTotal += speeds.downBps + speeds.upBps;
+        const delta = (speeds.downBps || 0) + (speeds.upBps || 0);
+        dev.todayBytesTotal = (dev.todayBytesTotal || 0) + delta;
+        if (delta > 0) {
+          deltaMap[id] = delta;
+        }
+      }
+    }
+
+    // Periodically flush accumulated bandwidth delta to MongoDB every 5 seconds
+    const now = Date.now();
+    if (now - this.lastMongoBytesFlush > 5000 && Object.keys(deltaMap).length > 0) {
+      this.lastMongoBytesFlush = now;
+      if (isConnectedToMongo) {
+        const ops = Object.entries(deltaMap).map(([id, delta]) => ({
+          updateOne: {
+            filter: { id },
+            update: { $inc: { todayBytesTotal: delta } },
+          },
+        }));
+        DeviceModel.bulkWrite(ops).catch(() => {});
       }
     }
   }

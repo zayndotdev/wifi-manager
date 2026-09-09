@@ -9,6 +9,7 @@ import { AppShell } from './components/layout/AppShell';
 import { OverviewView } from './components/views/OverviewView';
 import { DevicesView } from './components/views/DevicesView';
 import { DeviceDetailDrawer } from './components/views/DeviceDetailDrawer';
+import { DeviceDetailView } from './components/views/DeviceDetailView';
 import { ActivityView } from './components/views/ActivityView';
 import { RulesView } from './components/views/RulesView';
 import { SecurityView } from './components/views/SecurityView';
@@ -19,6 +20,7 @@ import { Device } from './types/device';
 
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState('overview');
+  const [viewingDeviceId, setViewingDeviceId] = React.useState<string | null>(null);
   const { devices, selectedDevice, setSelectedDevice } = useDevices();
 
   const [throttleDevice, setThrottleDevice] = React.useState<Device | null>(null);
@@ -29,30 +31,53 @@ const AppContent: React.FC = () => {
     setSelectedDevice(found);
   };
 
-  return (
-    <AppShell activeTab={activeTab} setActiveTab={setActiveTab}>
-      {activeTab === 'overview' && (
-        <OverviewView
-          onSelectDevice={handleSelectDevice}
-          onNavigateTab={setActiveTab}
-        />
-      )}
+  const handleOpenFullDetails = (id: string) => {
+    setSelectedDevice(null);
+    setViewingDeviceId(id);
+  };
 
-      {activeTab === 'devices' && (
-        <DevicesView
-          onSelectDevice={handleSelectDevice}
+  const handleTabChange = (tab: string) => {
+    setViewingDeviceId(null);
+    setActiveTab(tab);
+  };
+
+  return (
+    <AppShell activeTab={activeTab} setActiveTab={handleTabChange}>
+      {viewingDeviceId ? (
+        <DeviceDetailView
+          deviceId={viewingDeviceId}
+          onBack={() => setViewingDeviceId(null)}
           onOpenThrottleModal={setThrottleDevice}
           onOpenKickModal={setKickDevice}
         />
+      ) : (
+        <>
+          {activeTab === 'overview' && (
+            <OverviewView
+              onSelectDevice={handleSelectDevice}
+              onNavigateTab={handleTabChange}
+              onOpenFullDetails={handleOpenFullDetails}
+            />
+          )}
+
+          {activeTab === 'devices' && (
+            <DevicesView
+              onSelectDevice={handleSelectDevice}
+              onOpenThrottleModal={setThrottleDevice}
+              onOpenKickModal={setKickDevice}
+              onOpenFullDetails={handleOpenFullDetails}
+            />
+          )}
+
+          {activeTab === 'activity' && <ActivityView />}
+
+          {activeTab === 'rules' && <RulesView />}
+
+          {activeTab === 'security' && <SecurityView />}
+
+          {activeTab === 'settings' && <SettingsView />}
+        </>
       )}
-
-      {activeTab === 'activity' && <ActivityView />}
-
-      {activeTab === 'rules' && <RulesView />}
-
-      {activeTab === 'security' && <SecurityView />}
-
-      {activeTab === 'settings' && <SettingsView />}
 
       {/* Slide-over Device Inspector Drawer */}
       <DeviceDetailDrawer
@@ -61,6 +86,7 @@ const AppContent: React.FC = () => {
         onClose={() => setSelectedDevice(null)}
         onOpenThrottleModal={setThrottleDevice}
         onOpenKickModal={setKickDevice}
+        onOpenFullDetails={handleOpenFullDetails}
       />
 
       {/* Speed Limiter Modal */}

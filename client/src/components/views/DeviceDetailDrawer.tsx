@@ -28,6 +28,7 @@ export interface DeviceDetailDrawerProps {
   onClose: () => void;
   onOpenThrottleModal: (device: Device) => void;
   onOpenKickModal: (device: Device) => void;
+  onOpenFullDetails?: (deviceId: string) => void;
 }
 
 export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
@@ -36,6 +37,7 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
   onClose,
   onOpenThrottleModal,
   onOpenKickModal,
+  onOpenFullDetails,
 }) => {
   const { pauseDevice, resumeDevice, blockDevice, updateCategory } = useDevices();
   const [deviceDomains, setDeviceDomains] = React.useState<DomainEvent[]>([]);
@@ -79,6 +81,22 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
       subtitle={`${device.vendor} • ${device.ip}`}
     >
       <div className="space-y-6 text-xs">
+        {/* Full Details Page CTA */}
+        {onOpenFullDetails && (
+          <Button
+            variant="primary"
+            size="sm"
+            className="w-full gap-2 font-medium bg-primary hover:bg-primary/90 text-white shadow-sm"
+            onClick={() => {
+              onClose();
+              onOpenFullDetails(device.id);
+            }}
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            <span>Open Dedicated Device Details Page</span>
+          </Button>
+        )}
+
         {/* Top Action Bar */}
         <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-secondary/40">
           <Button

@@ -30,6 +30,7 @@ import {
   X,
   AlertCircle,
   RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -37,12 +38,14 @@ export interface DevicesViewProps {
   onSelectDevice: (deviceId: string) => void;
   onOpenThrottleModal: (device: Device) => void;
   onOpenKickModal: (device: Device) => void;
+  onOpenFullDetails?: (deviceId: string) => void;
 }
 
 export const DevicesView: React.FC<DevicesViewProps> = ({
   onSelectDevice,
   onOpenThrottleModal,
   onOpenKickModal,
+  onOpenFullDetails,
 }) => {
   const { devices, pauseDevice, resumeDevice, blockDevice, updateNickname, isScanning, scanNetwork } = useDevices();
 
@@ -262,8 +265,13 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {onOpenFullDetails && (
+                            <DropdownMenuItem onClick={() => onOpenFullDetails(dev.id)}>
+                              <ExternalLink className="h-3 w-3 mr-2 text-primary" /> Full Details Page
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onClick={() => onSelectDevice(dev.id)}>
-                            Inspect Details
+                            Quick Inspector (Sidebar)
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleStartRename(dev)}>
                             Rename Device
