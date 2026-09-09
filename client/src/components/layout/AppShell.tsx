@@ -6,6 +6,7 @@ import { cn } from '../../lib/utils';
 export interface AppShellProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  hideTabs?: boolean;
   children: React.ReactNode;
 }
 
@@ -21,6 +22,7 @@ const TABS = [
 export const AppShell: React.FC<AppShellProps> = ({
   activeTab,
   setActiveTab,
+  hideTabs = false,
   children,
 }) => {
   return (
@@ -28,8 +30,9 @@ export const AppShell: React.FC<AppShellProps> = ({
       {/* Top Header */}
       <TopNavbar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {/* Sub-Navigation Tabs Bar */}
-      <div className="w-full border-b border-border bg-card/50 backdrop-blur-xs">
+      {/* Sub-Navigation Tabs Bar (Hidden on Standalone Dedicated Pages) */}
+      {!hideTabs && (
+        <div className="w-full border-b border-border bg-card/50 backdrop-blur-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto py-2 scrollbar-none" aria-label="Tabs">
             {TABS.map((tab) => {
@@ -54,6 +57,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           </nav>
         </div>
       </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">

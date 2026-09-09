@@ -26,6 +26,45 @@ const AppContent: React.FC = () => {
   const [throttleDevice, setThrottleDevice] = React.useState<Device | null>(null);
   const [kickDevice, setKickDevice] = React.useState<Device | null>(null);
 
+  // Helper to parse route from hash or pathname
+  const parseCurrentRoute = React.useCallback(() => {
+    const hash = window.location.hash.replace(/^#\/?/, '');
+    const pathname = window.location.pathname.replace(/^\//, '');
+    const route = hash || pathname;
+
+    if (route.startsWith('devices/')) {
+      const devId = route.replace('devices/', '');
+      return { tab: 'devices', deviceId: devId || null };
+    }
+
+    const validTabs = ['overview', 'devices', 'activity', 'rules', 'security', 'settings'];
+    if (validTabs.includes(route)) {
+      return { tab: route, deviceId: null };
+    }
+
+    return { tab: 'overview', deviceId: null };
+  }, []);
+
+  // Listen to URL hash & popstate changes for back/forward navigation & deep-linking
+  React.useEffect(() => {
+    const syncRouteFromUrl = () => {
+      const { tab, deviceId } = parseCurrentRoute();
+      setActiveTab(tab);
+      setViewingDeviceId(deviceId);
+    };
+
+    window.addEventListener('hashchange', syncRouteFromUrl);
+    window.addEventListener('popstate', syncRouteFromUrl);
+
+    // Initial sync
+    syncRouteFromUrl();
+
+    return () => {
+      window.removeEventListener('hashchange', syncRouteFromUrl);
+      window.removeEventListener('popstate', syncRouteFromUrl);
+    };
+  }, [parseCurrentRoute]);
+
   const handleSelectDevice = (id: string) => {
     const found = devices.find((d) => d.id === id) || null;
     setSelectedDevice(found);
@@ -34,19 +73,31 @@ const AppContent: React.FC = () => {
   const handleOpenFullDetails = (id: string) => {
     setSelectedDevice(null);
     setViewingDeviceId(id);
+    window.location.hash = `#/devices/${id}`;
+  };
+
+  const handleBackFromDevice = () => {
+    setViewingDeviceId(null);
+    setActiveTab('devices');
+    window.location.hash = `#/devices`;
   };
 
   const handleTabChange = (tab: string) => {
     setViewingDeviceId(null);
     setActiveTab(tab);
+    window.location.hash = `#/${tab}`;
   };
 
   return (
-    <AppShell activeTab={activeTab} setActiveTab={handleTabChange}>
+    <AppShell
+      activeTab={activeTab}
+      setActiveTab={handleTabChange}
+      hideTabs={!!viewingDeviceId}
+    >
       {viewingDeviceId ? (
         <DeviceDetailView
           deviceId={viewingDeviceId}
-          onBack={() => setViewingDeviceId(null)}
+          onBack={handleBackFromDevice}
           onOpenThrottleModal={setThrottleDevice}
           onOpenKickModal={setKickDevice}
         />

@@ -187,8 +187,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             return (
               <Card
                 key={dev.id}
+                onClick={() => onSelectDevice(dev.id)}
                 className={cn(
-                  'p-4 transition-all flex flex-col justify-between hover:border-border-hover',
+                  'p-4 transition-all flex flex-col justify-between hover:border-primary/50 hover:shadow-subtle cursor-pointer select-none',
                   isPaused && 'border-rose-500/30 bg-rose-500/[0.02]',
                   isBlocked && 'border-red-500/40 opacity-75'
                 )}
@@ -200,7 +201,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       <DeviceIcon category={dev.category} />
                       <div className="min-w-0 flex-1">
                         {isEditing ? (
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                             <input
                               type="text"
                               value={editNameValue}
@@ -258,42 +259,44 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       )}
 
                       {/* Options Menu */}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon-sm" className="h-6 w-6">
-                            <MoreVertical className="h-3 w-3" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {onOpenFullDetails && (
-                            <DropdownMenuItem onClick={() => onOpenFullDetails(dev.id)}>
-                              <ExternalLink className="h-3 w-3 mr-2 text-primary" /> Full Details Page
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" className="h-6 w-6">
+                              <MoreVertical className="h-3 w-3" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {onOpenFullDetails && (
+                              <DropdownMenuItem onClick={() => onOpenFullDetails(dev.id)}>
+                                <ExternalLink className="h-3 w-3 mr-2 text-primary" /> Full Details Page
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => onSelectDevice(dev.id)}>
+                              Quick Inspector (Sidebar)
                             </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem onClick={() => onSelectDevice(dev.id)}>
-                            Quick Inspector (Sidebar)
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleStartRename(dev)}>
-                            Rename Device
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => onOpenThrottleModal(dev)}>
-                            <Sliders className="h-3 w-3 mr-2" /> Speed Limit
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            destructive
-                            onClick={() => onOpenKickModal(dev)}
-                          >
-                            <UserX className="h-3 w-3 mr-2" /> Kick Off Wi-Fi
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            destructive
-                            onClick={() => blockDevice(dev.id, 'Blocked from device card')}
-                          >
-                            <Ban className="h-3 w-3 mr-2" /> Ban MAC Permanently
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            <DropdownMenuItem onClick={() => handleStartRename(dev)}>
+                              Rename Device
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onOpenThrottleModal(dev)}>
+                              <Sliders className="h-3 w-3 mr-2" /> Speed Limit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              destructive
+                              onClick={() => onOpenKickModal(dev)}
+                            >
+                              <UserX className="h-3 w-3 mr-2" /> Kick Off Wi-Fi
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              destructive
+                              onClick={() => blockDevice(dev.id, 'Blocked from device card')}
+                            >
+                              <Ban className="h-3 w-3 mr-2" /> Ban MAC Permanently
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                   </div>
 
@@ -336,7 +339,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                     variant={isPaused ? 'subtle' : 'secondary'}
                     size="sm"
                     className="h-7 text-xs gap-1.5"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       if (isPaused) {
                         resumeDevice(dev.id);
                       } else {

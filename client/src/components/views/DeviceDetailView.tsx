@@ -52,6 +52,7 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
 }) => {
   const {
     devices,
+    isLoading,
     pauseDevice,
     resumeDevice,
     blockDevice,
@@ -60,7 +61,23 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
   } = useDevices();
   const { toast } = useToast();
 
-  const device = devices.find((d) => d.id === deviceId) || null;
+  const [directDevice, setDirectDevice] = React.useState<Device | null>(null);
+  const [isFetchingDirect, setIsFetchingDirect] = React.useState(false);
+
+  const matchedDevice = devices.find((d) => d.id === deviceId);
+  const device = matchedDevice || directDevice;
+
+  React.useEffect(() => {
+    if (!matchedDevice && deviceId) {
+      setIsFetchingDirect(true);
+      api.getDeviceById(deviceId)
+        .then((res: Device) => {
+          if (res) setDirectDevice(res);
+        })
+        .catch(() => {})
+        .finally(() => setIsFetchingDirect(false));
+    }
+  }, [matchedDevice, deviceId]);
 
   const [isEditingName, setIsEditingName] = React.useState(false);
   const [nicknameInput, setNicknameInput] = React.useState('');
@@ -97,6 +114,15 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
       setNicknameInput(device.nickname || device.hostname);
     }
   }, [device?.nickname, device?.hostname]);
+
+  if (!device && (isLoading || isFetchingDirect)) {
+    return (
+      <div className="py-24 flex flex-col items-center justify-center space-y-4 animate-fade-in text-center">
+        <div className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        <p className="text-xs text-foreground-muted">Loading device parameters from gateway...</p>
+      </div>
+    );
+  }
 
   if (!device) {
     return (
@@ -153,23 +179,39 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
   return (
     <div className="space-y-6 animate-fade-in pb-12">
       {/* Top Breadcrumb & Return Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-border/40">
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={onBack} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={onBack} className="gap-1.5 cursor-pointer shadow-subtle hover:bg-secondary">
             <ArrowLeft className="h-4 w-4" />
             <span>Back to Devices</span>
           </Button>
           <div className="text-xs text-foreground-muted hidden sm:flex items-center gap-1.5">
-            <span>Devices</span>
+            <span className="cursor-pointer hover:text-foreground hover:underline" onClick={onBack}>Devices</span>
             <span>/</span>
-            <span className="text-foreground font-medium truncate max-w-[200px]">
+            <span className="text-foreground font-semibold truncate max-w-[220px]">
               {device.nickname || device.hostname}
             </span>
           </div>
+          <Badge variant="neutral" className="text-[10px] hidden md:inline-flex font-mono">
+            {device.id}
+          </Badge>
         </div>
 
-        {/* Global Quick Action Controls */}
+        {/* Global Quick Action Controls + Shareable URL Link */}
         <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-xs text-foreground-muted hover:text-foreground"
+            onClick={() => {
+              const url = `${window.location.origin}/#/devices/${device.id}`;
+              navigator.clipboard.writeText(url);
+              toast({ type: 'info', title: 'Shareable URL Copied', description: url });
+            }}
+          >
+            <Copy className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Copy Link</span>
+          </Button>
           <Button
             variant={isPaused ? 'primary' : 'secondary'}
             size="sm"

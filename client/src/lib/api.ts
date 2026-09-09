@@ -34,6 +34,7 @@ export const api = {
   
   // Devices
   getDevices: () => request<import('../types/device').Device[]>('/devices'),
+  getDevice: (id: string) => request<import('../types/device').Device>(`/devices/${id}`),
   scanDevices: () => request<{ message: string; count: number; devices: import('../types/device').Device[] }>('/devices/scan', { method: 'POST' }),
   getDeviceById: (id: string) => request<import('../types/device').Device>(`/devices/${id}`),
   updateDeviceNickname: (id: string, nickname: string) =>

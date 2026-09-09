@@ -144,6 +144,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           subtext={`${pausedDevices.length} paused • ${devices.length} real devices discovered`}
           icon={<Wifi className="h-4 w-4" />}
           trend={{ value: `${devices.filter(d => d.isNew).length} new`, isPositive: true }}
+          onClick={() => onNavigateTab('devices')}
+          className="group hover:border-primary/50"
         />
         <StatCard
           label="WAN Ingress (Download)"
