@@ -38,21 +38,54 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
   // Fetch recent domains
   React.useEffect(() => {
+    const isNoise = (dom: string) => {
+      const d = dom.toLowerCase();
+      return (
+        d.includes('mongodb.net') ||
+        d.includes('mongodb.com') ||
+        d.includes('compute.amazonaws.com') ||
+        d.includes('prod.do.dsp.mp.microsoft.com') ||
+        d.includes('trafficmanager.net') ||
+        d.includes('events.data.microsoft.com') ||
+        d.includes('edgekey.net') ||
+        d.includes('edgesuite.net') ||
+        d.includes('delivery.mp.microsoft.com')
+      );
+    };
+
     api
       .getRecentDomains('all')
       .then((res) => {
-        setRecentDomains(res?.domains ? res.domains.slice(0, 5) : []);
+        const clean = (res?.domains || []).filter((d) => !isNoise(d.domain));
+        setRecentDomains(clean.slice(0, 5));
       })
       .catch(() => {});
   }, []);
 
   // Real-time DNS live telemetry listener
   React.useEffect(() => {
+    const isNoise = (dom: string) => {
+      const d = dom.toLowerCase();
+      return (
+        d.includes('mongodb.net') ||
+        d.includes('mongodb.com') ||
+        d.includes('compute.amazonaws.com') ||
+        d.includes('prod.do.dsp.mp.microsoft.com') ||
+        d.includes('trafficmanager.net') ||
+        d.includes('events.data.microsoft.com') ||
+        d.includes('edgekey.net') ||
+        d.includes('edgesuite.net') ||
+        d.includes('delivery.mp.microsoft.com')
+      );
+    };
+
     const unsubscribe = addListener('dns_activity', (payload: any) => {
-      if (!payload?.event) return;
+      if (!payload?.event || isNoise(payload.event.domain)) return;
       const newEvent: DomainEvent = payload.event;
       setRecentDomains((prev) => {
-        const filtered = prev.filter((d) => d.domain.toLowerCase() !== newEvent.domain.toLowerCase());
+        const filtered = prev.filter(
+          (d) => d.domain.toLowerCase() !== newEvent.domain.toLowerCase() && !isNoise(d.domain)
+        );
         return [newEvent, ...filtered.slice(0, 4)];
       });
     });

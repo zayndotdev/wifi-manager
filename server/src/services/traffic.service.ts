@@ -2,11 +2,14 @@ import mongoose from 'mongoose';
 import { DomainLogModel, IDomainLog } from '../models/DomainLog.model.js';
 import { isConnectedToMongo } from '../config/database.js';
 
+const SYSTEM_NOISE_REGEX = /(mongodb\.net|mongodb\.com|compute\.amazonaws\.com|\.prod\.do\.dsp\.mp\.microsoft\.com|trafficmanager\.net|events\.data\.microsoft\.com|\.edgekey\.net|\.edgesuite\.net|delivery\.mp\.microsoft\.com)/i;
+
 class TrafficService {
-  private domainList: any[] = [];
-  private blockedDomains: Set<string> = new Set(['doubleclick.net', 'tracker-telemetry.analytics.io']);
+  private domainList: any[];
+  private blockedDomains: Set<string>;
 
   constructor() {
+    this.blockedDomains = new Set(['doubleclick.net', 'tracker-telemetry.analytics.io']);
     this.domainList = [];
     this.loadFromMongo();
   }
@@ -14,7 +17,13 @@ class TrafficService {
   private async loadFromMongo() {
     if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
       try {
-        const docs = await DomainLogModel.find().sort({ timestamp: -1 }).limit(100).lean();
+        // Clean purge any historical background cloud infrastructure noise
+        await DomainLogModel.deleteMany({ domain: { $regex: SYSTEM_NOISE_REGEX } }).catch(() => {});
+
+        const docs = await DomainLogModel.find({ domain: { $not: SYSTEM_NOISE_REGEX } })
+          .sort({ timestamp: -1 })
+          .limit(100)
+          .lean();
         if (docs.length > 0) {
           this.domainList = docs;
         }
@@ -27,7 +36,7 @@ class TrafficService {
   public async getRecentDomains(category?: string): Promise<{ total: number; domains: any[] }> {
     if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
       try {
-        const query: any = {};
+        const query: any = { domain: { $not: SYSTEM_NOISE_REGEX } };
         if (category && category !== 'all') {
           query.category = category;
         }
@@ -40,7 +49,7 @@ class TrafficService {
       }
     }
 
-    let result = this.domainList;
+    let result = this.domainList.filter((d) => !SYSTEM_NOISE_REGEX.test(d.domain));
     if (category && category !== 'all') {
       result = result.filter((d) => d.category === category);
     }
@@ -91,6 +100,10 @@ class TrafficService {
   }
 
   public async addLiveEvent(event: any) {
+    if (SYSTEM_NOISE_REGEX.test(event.domain)) {
+      return;
+    }
+
     if (this.blockedDomains.has(event.domain.toLowerCase())) {
       event.status = 'blocked';
     }

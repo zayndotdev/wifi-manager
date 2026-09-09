@@ -478,7 +478,31 @@ class RealNetworkService {
 
   private ipToDomainMap: Map<string, string> = new Map();
 
-  // 7. Read Real DNS Resolution Cache & Active Outbound TCP Sockets
+  public isSystemNoiseDomain(dom: string): boolean {
+    const d = dom.toLowerCase();
+    return (
+      d.includes('mongodb.net') ||
+      d.includes('mongodb.com') ||
+      d.includes('compute.amazonaws.com') ||
+      d.includes('prod.do.dsp.mp.microsoft.com') ||
+      d.includes('trafficmanager.net') ||
+      d.includes('events.data.microsoft.com') ||
+      d.includes('edgekey.net') ||
+      d.includes('edgesuite.net') ||
+      d.includes('delivery.mp.microsoft.com') ||
+      d.endsWith('.local') ||
+      d.endsWith('.arpa') ||
+      d.startsWith('192.') ||
+      d.startsWith('127.') ||
+      d.startsWith('10.') ||
+      d.startsWith('172.16.') ||
+      d.startsWith('fe80:') ||
+      d.includes('::') ||
+      d.length < 4
+    );
+  }
+
+  // 7. Read Real DNS Resolution Cache & Active Outbound TCP Sockets (Filtered for Clean User Browsing)
   public getRealDnsCache(): string[] {
     const domains = new Set<string>();
 
@@ -492,17 +516,7 @@ class RealNetworkService {
         const m = line.match(/Record Name[\s.]+:\s*([^\r\n]+)/i);
         if (m && m[1]) {
           const dom = m[1].trim().toLowerCase();
-          if (
-            dom &&
-            !dom.endsWith('.local') &&
-            !dom.endsWith('.arpa') &&
-            !dom.startsWith('dns.') &&
-            dom.includes('.') &&
-            !dom.startsWith('192.') &&
-            !dom.startsWith('127.') &&
-            !dom.includes('::') &&
-            dom.length > 3
-          ) {
+          if (dom && !this.isSystemNoiseDomain(dom)) {
             currentDomain = dom;
             domains.add(dom);
           }
@@ -531,7 +545,10 @@ class RealNetworkService {
         const [remoteIp, port] = remote.split(':');
         if (port === '443' || port === '80') {
           if (this.ipToDomainMap.has(remoteIp)) {
-            domains.add(this.ipToDomainMap.get(remoteIp)!);
+            const dom = this.ipToDomainMap.get(remoteIp)!;
+            if (!this.isSystemNoiseDomain(dom)) {
+              domains.add(dom);
+            }
           } else {
             // Check well-known major provider subnets (Cloudflare/ChatGPT, Google, GitHub, Microsoft)
             if (

@@ -95,6 +95,10 @@ class TelemetryService {
     const now = Date.now();
 
     for (const domain of currentDomains) {
+      if (realNetworkService.isSystemNoiseDomain(domain)) {
+        continue;
+      }
+
       const lastLogged = this.lastDomainLoggedTime.get(domain) || 0;
       // Allow re-logging active domains every 12 seconds so ongoing browsing streams live
       if (now - lastLogged < 12000) {
