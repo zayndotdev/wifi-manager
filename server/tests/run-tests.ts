@@ -222,6 +222,20 @@ async function runAllTests() {
     return res.status === 200 && data.action === 'deauthenticated';
   });
 
+  // TST-020: Swagger UI Endpoint
+  await test('TST-020: Interactive Swagger UI Documentation (/api-docs)', async () => {
+    const res = await fetch(`${baseUrl}/api-docs/`);
+    const text = await res.text();
+    return (res.status === 200 || res.status === 301) && text.includes('swagger-ui');
+  });
+
+  // TST-021: OpenAPI 3.0 JSON Specification
+  await test('TST-021: OpenAPI 3.0 Raw JSON Spec (/api-docs/swagger.json)', async () => {
+    const res = await fetch(`${baseUrl}/api-docs/swagger.json`);
+    const spec = await res.json();
+    return res.status === 200 && spec.openapi === '3.0.3' && spec.info.title.includes('Wi-Fi Sentinel');
+  });
+
   server.close();
 
   console.log('\n======================================================');

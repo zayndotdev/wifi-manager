@@ -1,0 +1,1158 @@
+export const swaggerDocument = {
+  openapi: '3.0.3',
+  info: {
+    title: 'Wi-Fi Sentinel — Gateway Engine API',
+    version: '1.0.0',
+    description: `### Enterprise Wi-Fi Device Management & Network Telemetry Engine
+Wi-Fi Sentinel is an enterprise-grade local network gateway management platform. It provides 100% real hardware discovery via ARP and Windows network diagnostic utilities, real-time interface throughput tracking, per-client bandwidth throttling (QoS), parental domain blocking, access scheduling, and real-time WebSocket telemetry.
+
+#### Key Features:
+- **Zero Dummy Data**: All discovered devices, MAC addresses, and interfaces are read from real hardware.
+- **Microsecond Control**: Pause, resume, kick, throttle, or block clients instantly.
+- **Parental Controls & Domain Blocking**: Track DNS lookups and enforce blocklists.
+- **WebSocket Gateway**: Live 1-second telemetry broadcasting at \`ws://<host>:<port>/ws/telemetry\`.
+- **Offline & Private**: Zero data leaves the local network; zero third-party leakage.`,
+    contact: {
+      name: 'Wi-Fi Sentinel Engineering',
+      url: 'https://github.com/zayndotdev/wifi-manager',
+    },
+    license: {
+      name: 'MIT',
+      url: 'https://opensource.org/licenses/MIT',
+    },
+  },
+  servers: [
+    {
+      url: 'http://localhost:5080',
+      description: 'Local Development Server',
+    },
+    {
+      url: 'http://127.0.0.1:5080',
+      description: 'Loopback Interface',
+    },
+  ],
+  tags: [
+    {
+      name: 'Devices',
+      description: 'Network device discovery, hardware metadata, and per-device access controls',
+    },
+    {
+      name: 'Network Controls',
+      description: 'Network-wide emergency killswitches and access policies',
+    },
+    {
+      name: 'Traffic & DNS',
+      description: 'DNS query inspection, domain logs, and parental content filtering',
+    },
+    {
+      name: 'Schedules',
+      description: 'Automated bedtime and focus access schedules',
+    },
+    {
+      name: 'Security & Alerts',
+      description: 'Intrusion detection, rogue client warnings, and security event triage',
+    },
+    {
+      name: 'System & Mesh',
+      description: 'Gateway CPU/RAM telemetry, Wi-Fi radio metrics, and mesh topology',
+    },
+    {
+      name: 'Health',
+      description: 'Server uptime and connectivity probe',
+    },
+  ],
+  paths: {
+    '/health': {
+      get: {
+        tags: ['Health'],
+        summary: 'Health Check',
+        description: 'Returns current server status and ISO timestamp for liveness probes.',
+        responses: {
+          '200': {
+            description: 'Server is healthy and responsive',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/HealthResponse',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/devices': {
+      get: {
+        tags: ['Devices'],
+        summary: 'List All Discovered Devices',
+        description: 'Retrieves all network devices currently discovered on the local subnet.',
+        responses: {
+          '200': {
+            description: 'Array of discovered network devices',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'array',
+                  items: {
+                    $ref: '#/components/schemas/Device',
+                  },
+                },
+              },
+            },
+          },
+          '500': {
+            description: 'Internal server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/devices/scan': {
+      post: {
+        tags: ['Devices'],
+        summary: 'Trigger Subnet Rescan',
+        description: 'Forces an immediate ARP and network sweep to detect recently connected or disconnected devices.',
+        responses: {
+          '200': {
+            description: 'Scan completed successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    message: { type: 'string', example: 'Subnet scan completed' },
+                    count: { type: 'integer', example: 10 },
+                    devices: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/Device' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '500': {
+            description: 'Scan failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/devices/{id}': {
+      get: {
+        tags: ['Devices'],
+        summary: 'Get Device by ID',
+        description: 'Retrieves detailed hardware, network, and telemetry metrics for a specific device.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Unique device identifier (e.g. dev_74d83e08110a)',
+            schema: { type: 'string', example: 'dev_74d83e08110a' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Device found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Device' },
+              },
+            },
+          },
+          '404': {
+            description: 'Device not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '500': {
+            description: 'Internal server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+      patch: {
+        tags: ['Devices'],
+        summary: 'Update Device Metadata',
+        description: 'Updates a device custom nickname or category assignment.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: 'dev_74d83e08110a' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/DevicePatchRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Device updated successfully',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Device' },
+              },
+            },
+          },
+          '422': {
+            description: 'Validation failed (e.g. empty nickname)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '500': {
+            description: 'Internal server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/devices/{id}/pause': {
+      post: {
+        tags: ['Devices'],
+        summary: 'Pause WAN Access',
+        description: 'Blocks WAN internet traffic for the device while maintaining local LAN routing.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: 'dev_74d83e08110a' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Device paused',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Device' },
+              },
+            },
+          },
+          '500': {
+            description: 'Internal server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/devices/{id}/resume': {
+      post: {
+        tags: ['Devices'],
+        summary: 'Resume WAN Access',
+        description: 'Restores full WAN internet connectivity for a paused device.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: 'dev_74d83e08110a' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Device access resumed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Device' },
+              },
+            },
+          },
+          '500': {
+            description: 'Internal server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/devices/{id}/kick': {
+      post: {
+        tags: ['Devices'],
+        summary: 'Kick / Deauthenticate Device',
+        description: 'Disconnects the client from the Wi-Fi Access Point, forcing it to re-associate.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: 'dev_74d83e08110a' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Device deauthenticated',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Device' },
+              },
+            },
+          },
+          '500': {
+            description: 'Internal server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/devices/{id}/block': {
+      post: {
+        tags: ['Devices'],
+        summary: 'Blacklist / Block Device',
+        description: 'Permanently blacklists the device by hardware MAC address with optional administrative notes.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: 'dev_74d83e08110a' },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/DeviceBlockRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Device blacklisted',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Device' },
+              },
+            },
+          },
+          '500': {
+            description: 'Internal server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ['Devices'],
+        summary: 'Unblock / Whitelist Device',
+        description: 'Removes the device hardware MAC address from the router blacklist.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: 'dev_74d83e08110a' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Device unblocked and restored to active state',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Device' },
+              },
+            },
+          },
+          '500': {
+            description: 'Internal server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/devices/{id}/throttle': {
+      post: {
+        tags: ['Devices'],
+        summary: 'Throttle Device Bandwidth (QoS)',
+        description: 'Applies rate-limiting bandwidth caps on downstream and upstream throughput.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: 'dev_74d83e08110a' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/DeviceThrottleRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Bandwidth throttling limits applied',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Device' },
+              },
+            },
+          },
+          '500': {
+            description: 'Internal server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ['Devices'],
+        summary: 'Remove Bandwidth Throttle',
+        description: 'Removes bandwidth limitations, returning client to unmetered access.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: 'dev_74d83e08110a' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Throttle removed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Device' },
+              },
+            },
+          },
+          '500': {
+            description: 'Internal server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/devices/pause-all': {
+      post: {
+        tags: ['Network Controls'],
+        summary: 'Pause All Devices',
+        description: 'Emergency network pause disabling WAN for all connected clients.',
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/NetworkPauseAllRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'All applicable devices paused',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    pausedCount: { type: 'integer', example: 9 },
+                    devices: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/Device' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/devices/resume-all': {
+      post: {
+        tags: ['Network Controls'],
+        summary: 'Resume All Devices',
+        description: 'Resumes internet access across all currently paused clients.',
+        responses: {
+          '200': {
+            description: 'All devices resumed',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    resumedCount: { type: 'integer', example: 9 },
+                    devices: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/Device' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/network/pause-all': {
+      post: {
+        tags: ['Network Controls'],
+        summary: 'Network-wide Pause Killswitch',
+        description: 'Alias route to pause all network clients simultaneously.',
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/NetworkPauseAllRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Network paused',
+          },
+        },
+      },
+    },
+    '/api/network/resume-all': {
+      post: {
+        tags: ['Network Controls'],
+        summary: 'Network-wide Resume',
+        description: 'Alias route to unpause all clients simultaneously.',
+        responses: {
+          '200': {
+            description: 'Network resumed',
+          },
+        },
+      },
+    },
+    '/api/domains/recent': {
+      get: {
+        tags: ['Traffic & DNS'],
+        summary: 'Get Recent DNS Activity',
+        description: 'Fetches recent domain queries captured by the gateway DNS monitor.',
+        parameters: [
+          {
+            name: 'category',
+            in: 'query',
+            required: false,
+            description: 'Filter domain entries by category classification',
+            schema: {
+              type: 'string',
+              enum: ['streaming', 'social', 'gaming', 'work', 'education', 'shopping', 'adult', 'ad_tracker', 'general'],
+            },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Recent domain activity records',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/DomainLog' },
+                },
+              },
+            },
+          },
+          '500': {
+            description: 'Internal server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/domains/block': {
+      post: {
+        tags: ['Traffic & DNS'],
+        summary: 'Add Domain to Blacklist',
+        description: 'Enforces sinkholing or blocking for a specific domain name network-wide.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/DomainBlockRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Domain blocked successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    domain: { type: 'string', example: 'tiktok.com' },
+                    blocked: { type: 'boolean', example: true },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Domain string missing',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ['Traffic & DNS'],
+        summary: 'Remove Domain from Blacklist',
+        description: 'Unblocks a domain name and restores routing.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/DomainBlockRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Domain unblocked successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    domain: { type: 'string', example: 'tiktok.com' },
+                    unblocked: { type: 'boolean', example: true },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Domain string missing',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/schedules': {
+      get: {
+        tags: ['Schedules'],
+        summary: 'List Access Schedules',
+        description: 'Retrieves all configured time-based access control rules (e.g. Bedtime, Homework mode).',
+        responses: {
+          '200': {
+            description: 'Array of schedules',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/Schedule' },
+                },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ['Schedules'],
+        summary: 'Create Access Schedule',
+        description: 'Configures an automated time-window rule applied to designated devices.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ScheduleCreateRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Schedule created',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Schedule' },
+              },
+            },
+          },
+          '400': {
+            description: 'Required fields missing',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/schedules/{id}': {
+      patch: {
+        tags: ['Schedules'],
+        summary: 'Toggle Schedule State',
+        description: 'Enables or disables an existing schedule rule.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: 'sch_bedtime_kids' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ScheduleToggleRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Schedule toggled successfully',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Schedule' },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ['Schedules'],
+        summary: 'Delete Schedule',
+        description: 'Permanently removes an access schedule.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: 'sch_bedtime_kids' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Schedule deleted',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string', example: 'sch_bedtime_kids' },
+                    deleted: { type: 'boolean', example: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/security/alerts': {
+      get: {
+        tags: ['Security & Alerts'],
+        summary: 'List Security Alerts',
+        description: 'Retrieves all security events including newly joined devices, port scans, and malicious domain blocks.',
+        responses: {
+          '200': {
+            description: 'Array of security alert records',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/Alert' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/security/alerts/{id}': {
+      patch: {
+        tags: ['Security & Alerts'],
+        summary: 'Dismiss / Mark Alert as Read',
+        description: 'Marks a security alert as acknowledged/read.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: 'alt_new_dev_01' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Alert marked as read',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Alert' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/system/status': {
+      get: {
+        tags: ['System & Mesh'],
+        summary: 'Get Gateway Hardware & Wi-Fi Status',
+        description: 'Returns real hardware telemetry including WAN IP, gateway IP, Wi-Fi SSID, BSSID, channel, radio band, signal dBm, CPU/RAM utilization, and aggregate bandwidth throughput.',
+        responses: {
+          '200': {
+            description: 'System telemetry payload',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/SystemStatus' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/system/nodes': {
+      get: {
+        tags: ['System & Mesh'],
+        summary: 'Get Mesh Network Nodes',
+        description: 'Returns all detected Wi-Fi access points and mesh backhaul radio details.',
+        responses: {
+          '200': {
+            description: 'Array of mesh nodes',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/MeshNode' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/mesh/nodes': {
+      get: {
+        tags: ['System & Mesh'],
+        summary: 'Get Mesh Nodes (Alias)',
+        description: 'Alias route for `/api/system/nodes`.',
+        responses: {
+          '200': {
+            description: 'Array of mesh nodes',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/MeshNode' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  components: {
+    schemas: {
+      Device: {
+        type: 'object',
+        required: ['id', 'mac', 'ip', 'hostname', 'vendor', 'category', 'status'],
+        properties: {
+          id: { type: 'string', example: 'dev_74d83e08110a' },
+          mac: { type: 'string', example: '74:D8:3E:08:11:0A' },
+          ip: { type: 'string', example: '192.168.1.17' },
+          ipv6: { type: 'string', example: 'fe80::6124:9988:7766:1234' },
+          hostname: { type: 'string', example: 'Zayn-Workstation' },
+          nickname: { type: 'string', example: 'My Desktop PC' },
+          vendor: { type: 'string', example: 'Intel Corporate' },
+          category: {
+            type: 'string',
+            enum: ['phone', 'laptop', 'tablet', 'tv', 'console', 'iot', 'audio', 'printer', 'unknown'],
+            example: 'laptop',
+          },
+          status: {
+            type: 'string',
+            enum: ['active', 'idle', 'paused', 'blocked', 'throttled'],
+            example: 'active',
+          },
+          signalDbm: { type: 'integer', example: -58 },
+          meshNodeId: { type: 'string', example: 'node_gateway' },
+          meshNodeName: { type: 'string', example: 'Zayn-5G (Main Gateway)' },
+          band: {
+            type: 'string',
+            enum: ['2.4GHz', '5GHz', '6GHz'],
+            example: '5GHz',
+          },
+          channel: { type: 'integer', example: 161 },
+          linkSpeedMbps: { type: 'integer', example: 866 },
+          currentDownloadBps: { type: 'integer', example: 2450000 },
+          currentUploadBps: { type: 'integer', example: 450000 },
+          todayBytesTotal: { type: 'integer', example: 3485000000 },
+          connectedAt: { type: 'string', format: 'date-time' },
+          lastSeenAt: { type: 'string', format: 'date-time' },
+          isRandomizedMac: { type: 'boolean', example: false },
+          isNewDevice: { type: 'boolean', example: false },
+          isThrottled: { type: 'boolean', example: false },
+          throttleLimits: {
+            type: 'object',
+            properties: {
+              downloadLimitKbps: { type: 'integer', example: 5000 },
+              uploadLimitKbps: { type: 'integer', example: 2000 },
+            },
+          },
+          bedtimeScheduleId: { type: 'string', nullable: true },
+        },
+      },
+      DevicePatchRequest: {
+        type: 'object',
+        properties: {
+          nickname: { type: 'string', example: 'Living Room TV' },
+          category: {
+            type: 'string',
+            enum: ['phone', 'laptop', 'tablet', 'tv', 'console', 'iot', 'audio', 'printer', 'unknown'],
+            example: 'tv',
+          },
+        },
+      },
+      DeviceBlockRequest: {
+        type: 'object',
+        properties: {
+          notes: { type: 'string', example: 'Suspicious beaconing activity detected' },
+        },
+      },
+      DeviceThrottleRequest: {
+        type: 'object',
+        properties: {
+          downloadLimitKbps: { type: 'integer', example: 5000, description: 'Maximum downstream bandwidth in Kbps' },
+          uploadLimitKbps: { type: 'integer', example: 2000, description: 'Maximum upstream bandwidth in Kbps' },
+        },
+      },
+      NetworkPauseAllRequest: {
+        type: 'object',
+        properties: {
+          excludeWhitelisted: {
+            type: 'boolean',
+            default: true,
+            description: 'Whether to skip whitelisted management devices from pausing',
+          },
+        },
+      },
+      DomainLog: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'dom_1725900000_a1b2' },
+          domain: { type: 'string', example: 'api.github.com' },
+          category: {
+            type: 'string',
+            enum: ['streaming', 'social', 'gaming', 'work', 'education', 'shopping', 'adult', 'ad_tracker', 'general'],
+            example: 'work',
+          },
+          deviceId: { type: 'string', example: 'dev_74d83e08110a' },
+          deviceNickname: { type: 'string', example: 'Zayn-Workstation' },
+          timestamp: { type: 'string', format: 'date-time' },
+          status: {
+            type: 'string',
+            enum: ['allowed', 'blocked', 'safesearch'],
+            example: 'allowed',
+          },
+          queryCountToday: { type: 'integer', example: 42 },
+          bytesTransferred: { type: 'integer', example: 125000 },
+        },
+      },
+      DomainBlockRequest: {
+        type: 'object',
+        required: ['domain'],
+        properties: {
+          domain: { type: 'string', example: 'adservice.google.com' },
+        },
+      },
+      Schedule: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'sch_kids_bedtime' },
+          name: { type: 'string', example: 'Kids Bedtime' },
+          daysOfWeek: {
+            type: 'array',
+            items: { type: 'integer' },
+            example: [1, 2, 3, 4, 5],
+            description: '0 = Sunday, 1 = Monday, ..., 6 = Saturday',
+          },
+          startTime: { type: 'string', example: '21:30' },
+          endTime: { type: 'string', example: '07:00' },
+          deviceIds: {
+            type: 'array',
+            items: { type: 'string' },
+            example: ['dev_galaxy_a06'],
+          },
+          action: { type: 'string', example: 'pause_wan' },
+          enabled: { type: 'boolean', example: true },
+        },
+      },
+      ScheduleCreateRequest: {
+        type: 'object',
+        required: ['name', 'startTime', 'endTime'],
+        properties: {
+          name: { type: 'string', example: 'Focus Study Hours' },
+          daysOfWeek: {
+            type: 'array',
+            items: { type: 'integer' },
+            example: [1, 2, 3, 4],
+          },
+          startTime: { type: 'string', example: '14:00' },
+          endTime: { type: 'string', example: '18:00' },
+          deviceIds: {
+            type: 'array',
+            items: { type: 'string' },
+            example: ['dev_tablet_01'],
+          },
+          action: { type: 'string', default: 'pause_wan' },
+        },
+      },
+      ScheduleToggleRequest: {
+        type: 'object',
+        required: ['enabled'],
+        properties: {
+          enabled: { type: 'boolean', example: false },
+        },
+      },
+      Alert: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'alt_rouge_beacon' },
+          type: {
+            type: 'string',
+            enum: ['new_device_connected', 'malicious_domain_blocked', 'bandwidth_spike', 'suspicious_traffic'],
+            example: 'new_device_connected',
+          },
+          severity: {
+            type: 'string',
+            enum: ['low', 'medium', 'high', 'critical'],
+            example: 'medium',
+          },
+          title: { type: 'string', example: 'New Device Joined Network' },
+          description: { type: 'string', example: 'Infinix Smart 6 (192.168.1.19) associated on Zayn-5G' },
+          targetMac: { type: 'string', example: 'E0:DC:FF:11:22:33' },
+          timestamp: { type: 'string', format: 'date-time' },
+          isRead: { type: 'boolean', example: false },
+        },
+      },
+      SystemStatus: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'online' },
+          gatewayIp: { type: 'string', example: '192.168.1.1' },
+          wanIp: { type: 'string', example: '192.168.1.17' },
+          ssid: { type: 'string', example: 'Zayn-5G' },
+          bssid: { type: 'string', example: 'e0:dc:ff:37:3e:bc' },
+          channel: { type: 'integer', example: 161 },
+          band: { type: 'string', example: '5GHz' },
+          signalDbm: { type: 'integer', example: -58 },
+          uptimeSeconds: { type: 'integer', example: 34821 },
+          cpuUsagePercent: { type: 'integer', example: 8 },
+          ramUsagePercent: { type: 'integer', example: 28 },
+          firmwareVersion: { type: 'string', example: 'v2.4.1-sentinel' },
+          activeBandwidth: {
+            type: 'object',
+            properties: {
+              downloadBps: { type: 'integer', example: 2450000 },
+              uploadBps: { type: 'integer', example: 120000 },
+            },
+          },
+          clientCounts: {
+            type: 'object',
+            properties: {
+              total: { type: 'integer', example: 10 },
+              active: { type: 'integer', example: 8 },
+              paused: { type: 'integer', example: 1 },
+              blocked: { type: 'integer', example: 1 },
+            },
+          },
+        },
+      },
+      MeshNode: {
+        type: 'object',
+        properties: {
+          nodeId: { type: 'string', example: 'node_gateway' },
+          name: { type: 'string', example: 'Zayn-5G (Main Gateway)' },
+          isMainRouter: { type: 'boolean', example: true },
+          ip: { type: 'string', example: '192.168.1.1' },
+          bssid: { type: 'string', example: 'e0:dc:ff:37:3e:bc' },
+          connectedClientsCount: { type: 'integer', example: 10 },
+          backhaul: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', example: 'wireless_5ghz' },
+              signalDbm: { type: 'integer', example: -58 },
+              speedMbps: { type: 'integer', example: 866 },
+            },
+          },
+          channel24: { type: 'integer', example: 6 },
+          channel5: { type: 'integer', example: 161 },
+        },
+      },
+      HealthResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'ok' },
+          timestamp: { type: 'string', format: 'date-time' },
+        },
+      },
+      ErrorResponse: {
+        type: 'object',
+        properties: {
+          error: { type: 'string', example: 'Device not found' },
+          field: { type: 'string', example: 'nickname', nullable: true },
+        },
+      },
+    },
+  },
+};

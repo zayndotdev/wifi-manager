@@ -14,10 +14,10 @@ async function testAll() {
   console.log('=== dns.lookupService (OS-level resolver) ===');
   for (const ip of ips) {
     try {
-      const [hostname] = await lookupServiceAsync(ip, 0);
-      console.log(`  ${ip} -> ${hostname}`);
-    } catch (e) {
-      console.log(`  ${ip} -> [FAILED: ${e.code}]`);
+      const result = await lookupServiceAsync(ip, 0);
+      console.log(`  ${ip} -> ${result.hostname}`);
+    } catch (e: any) {
+      console.log(`  ${ip} -> [FAILED: ${e.code || e.message}]`);
     }
   }
 
@@ -26,8 +26,8 @@ async function testAll() {
     try {
       const hostnames = await reverseAsync(ip);
       console.log(`  ${ip} -> ${hostnames.join(', ')}`);
-    } catch (e) {
-      console.log(`  ${ip} -> [FAILED: ${e.code}]`);
+    } catch (e: any) {
+      console.log(`  ${ip} -> [FAILED: ${e.code || e.message}]`);
     }
   }
 }

@@ -4,6 +4,7 @@
   <img src="https://img.shields.io/badge/React-19-61dafb?style=for-the-badge&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/MongoDB-Atlas-47a248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB" />
+  <img src="https://img.shields.io/badge/Swagger-OpenAPI%203.0-85EA2D?style=for-the-badge&logo=swagger&logoColor=black" alt="Swagger" />
 </p>
 
 <h1 align="center">📡 Wi-Fi Sentinel</h1>
@@ -18,7 +19,8 @@
   <a href="#%EF%B8%8F-tech-stack">Tech Stack</a> •
   <a href="#-project-structure">Structure</a> •
   <a href="#-getting-started">Setup</a> •
-  <a href="#-api-reference">API</a> •
+  <a href="#-api-reference--interactive-swagger-ui">Swagger API</a> •
+  <a href="docs/SWAGGER_AND_API_REFERENCE.md">Full API Docs</a> •
   <a href="#-architecture">Architecture</a> •
   <a href="#-license">License</a>
 </p>
@@ -275,70 +277,76 @@ npm test
 
 ---
 
-## 🔌 API Reference
+## 🔌 API Reference & Interactive Swagger UI
 
-All endpoints are prefixed with `/api`.
+Wi-Fi Sentinel includes an interactive **Swagger UI** for testing endpoints directly in your browser, alongside an **OpenAPI 3.0.3 specification** for importing into tools like Postman or Insomnia.
 
-### Devices
+- 📖 **Interactive Swagger UI:** [`http://localhost:5080/api-docs`](http://localhost:5080/api-docs)
+- 📄 **OpenAPI 3.0.3 JSON Spec:** [`http://localhost:5080/api-docs/swagger.json`](http://localhost:5080/api-docs/swagger.json) or [`docs/openapi.json`](docs/openapi.json)
+- 📚 **Comprehensive API Guide:** See the complete, exhaustive documentation in [**`docs/SWAGGER_AND_API_REFERENCE.md`**](docs/SWAGGER_AND_API_REFERENCE.md)
 
+### Core Endpoints
+
+#### Devices (`/api/devices`)
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/devices` | List all discovered devices |
-| `GET` | `/api/devices/:id` | Get device by ID |
-| `PATCH` | `/api/devices/:id` | Update device (nickname, category) |
-| `POST` | `/api/devices/scan` | Trigger manual network re-scan |
-| `POST` | `/api/devices/:id/pause` | Pause device internet access |
-| `POST` | `/api/devices/:id/resume` | Resume device internet access |
-| `POST` | `/api/devices/:id/kick` | Deauthenticate device from network |
-| `POST` | `/api/devices/:id/block` | Permanently block device |
-| `DELETE` | `/api/devices/:id/block` | Unblock device |
-| `POST` | `/api/devices/:id/throttle` | Set speed limits |
-| `DELETE` | `/api/devices/:id/throttle` | Remove speed limits |
+| `GET` | `/api/devices/:id` | Get device by ID (hardware & telemetry) |
+| `PATCH` | `/api/devices/:id` | Update device nickname or category |
+| `POST` | `/api/devices/scan` | Trigger immediate ARP subnet re-scan |
+| `POST` | `/api/devices/:id/pause` | Pause WAN internet access for device |
+| `POST` | `/api/devices/:id/resume` | Resume WAN internet access for device |
+| `POST` | `/api/devices/:id/kick` | Deauthenticate / force-disconnect device |
+| `POST` | `/api/devices/:id/block` | Permanently blacklist device by MAC |
+| `DELETE` | `/api/devices/:id/block` | Unblock / remove MAC from blacklist |
+| `POST` | `/api/devices/:id/throttle` | Apply QoS bandwidth rate-limiting |
+| `DELETE` | `/api/devices/:id/throttle` | Remove bandwidth rate-limiting |
 
-### Network Actions
-
+#### Network Controls (`/api/network` & `/api/devices`)
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/network/pause-all` | Pause all devices |
-| `POST` | `/api/network/resume-all` | Resume all devices |
+| `POST` | `/api/network/pause-all` | Emergency pause: cut WAN for all devices |
+| `POST` | `/api/network/resume-all` | Resume WAN for all devices |
 
-### Traffic & DNS
-
+#### Traffic & Parental Controls (`/api/domains`)
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/domains` | Get DNS activity log |
-| `GET` | `/api/domains/stats` | Get domain statistics |
+| `GET` | `/api/domains/recent` | Get recent DNS activity log (supports `?category=`) |
+| `POST` | `/api/domains/block` | Blacklist a domain name network-wide |
+| `DELETE` | `/api/domains/block` | Unblock a domain name |
 
-### System
-
+#### Bedtime & Focus Schedules (`/api/schedules`)
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/system/info` | Get WiFi interface details (SSID, signal, band) |
-| `GET` | `/api/system/health` | Server health check |
+| `GET` | `/api/schedules` | List all access control schedules |
+| `POST` | `/api/schedules` | Create new schedule rule |
+| `PATCH` | `/api/schedules/:id` | Toggle schedule enabled/disabled |
+| `DELETE` | `/api/schedules/:id` | Delete schedule rule |
 
-### Security
-
+#### Security Threat Alerts (`/api/security`)
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/security/threats` | Get detected security threats |
+| `GET` | `/api/security/alerts` | List threat & rogue device alerts |
+| `PATCH` | `/api/security/alerts/:id` | Mark alert as acknowledged / read |
 
-### Schedules
-
+#### System & Mesh (`/api/system` & `/api/mesh`)
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/schedules` | List all schedules |
-| `POST` | `/api/schedules` | Create new schedule |
+| `GET` | `/health` | Gateway engine health check & timestamp |
+| `GET` | `/api/system/status` | Real gateway telemetry (WAN/LAN IP, SSID, BSSID, CPU, RAM) |
+| `GET` | `/api/system/nodes` | Get Wi-Fi mesh access points & radio backhaul |
+| `GET` | `/api/mesh/nodes` | Mesh nodes alias endpoint |
 
-### WebSocket Events
+### ⚡ WebSocket Telemetry Protocol
 
-Connect to `ws://localhost:5001` for real-time updates:
+Connect to `ws://localhost:5080/ws/telemetry` for live hardware metrics:
 
-| Event | Payload | Frequency |
+| Event | Payload Summary | Frequency |
 |---|---|---|
-| `speed_tick` | `{ wanDownloadBps, wanUploadBps, deviceSpeeds, timestamp }` | Every 1 second |
-| `devices_updated` | `{ devices: Device[] }` | Every 20 seconds |
-| `dns_activity` | `{ domain, category, deviceId }` | On new DNS query |
-| `alert` | `{ type, severity, message }` | On security event |
+| `connection_ack` | Handshake acknowledgment and status | Immediate on connect |
+| `speed_tick` | Real WAN download/upload speeds & per-device rates | Every 1 second |
+| `devices_updated` | Discovered device list updates from ARP | Every 20 seconds |
+| `alert` | Threat notifications & rogue device warnings | Event-driven |
 
 ---
 

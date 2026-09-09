@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
 import apiRouter from './routes/index.js';
 import { errorHandler, notFound } from './middlewares/errorHandler.js';
 import { ENV } from './config/env.js';
+import { swaggerDocument } from './docs/swaggerSpec.js';
 
 export function createApp() {
   const app = express();
@@ -18,6 +20,17 @@ export function createApp() {
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
+
+  // Raw OpenAPI 3.0 specification endpoints
+  app.get('/api-docs/swagger.json', (req, res) => {
+    res.json(swaggerDocument);
+  });
+  app.get('/api/docs/swagger.json', (req, res) => {
+    res.json(swaggerDocument);
+  });
+
+  // Interactive Swagger UI documentation
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
   // API router
   app.use('/api', apiRouter);
