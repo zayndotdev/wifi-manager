@@ -480,12 +480,12 @@ class RealNetworkService {
   public getRealDnsCache(): string[] {
     try {
       const output = execSync('ipconfig /displaydns', { encoding: 'utf-8' });
-      const records = output.match(/Record Name\s+\.\s+\.\s+\.\s+\.\s+:\s+([^\r\n]+)/g) || [];
+      const lines = output.split(/\r?\n/);
       const domains = new Set<string>();
 
-      for (const rec of records) {
-        const m = rec.match(/:\s+([^\r\n]+)/);
-        if (!m) continue;
+      for (const line of lines) {
+        const m = line.match(/Record Name[\s.]+:\s*([^\r\n]+)/i);
+        if (!m || !m[1]) continue;
         const dom = m[1].trim().toLowerCase();
         if (
           dom &&
@@ -494,13 +494,15 @@ class RealNetworkService {
           !dom.startsWith('dns.') &&
           dom.includes('.') &&
           !dom.startsWith('192.') &&
-          !dom.startsWith('127.')
+          !dom.startsWith('127.') &&
+          !dom.includes('::') &&
+          dom.length > 3
         ) {
           domains.add(dom);
         }
       }
 
-      return Array.from(domains).slice(0, 15);
+      return Array.from(domains).slice(0, 50);
     } catch {
       return [];
     }

@@ -6,6 +6,7 @@ import { Input } from '../ui/Input';
 import { api } from '../../lib/api';
 import { DomainEvent, DomainCategory } from '../../types/traffic';
 import { useToast } from '../ui/Toast';
+import { useWebSocket } from '../../context/WebSocketContext';
 import {
   Search,
   Shield,
@@ -24,12 +25,13 @@ export const ActivityView: React.FC = () => {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const { toast } = useToast();
+  const { addListener } = useWebSocket();
 
   const fetchDomains = React.useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await api.getRecentDomains(categoryFilter);
-      setDomains(res.domains);
+      setDomains(res?.domains || []);
     } catch {
       // ignore
     } finally {
@@ -40,6 +42,29 @@ export const ActivityView: React.FC = () => {
   React.useEffect(() => {
     fetchDomains();
   }, [fetchDomains]);
+
+  // Real-time DNS live telemetry listener
+  React.useEffect(() => {
+    const unsubscribe = addListener('dns_activity', (payload: any) => {
+      if (!payload?.event) return;
+      const newEvent: DomainEvent = payload.event;
+      if (categoryFilter !== 'all' && newEvent.category !== categoryFilter) return;
+      setDomains((prev) => {
+        if (
+          prev.some(
+            (d) =>
+              d.id === newEvent.id ||
+              (d.domain === newEvent.domain &&
+                Math.abs(new Date(d.timestamp).getTime() - new Date(newEvent.timestamp).getTime()) < 3000)
+          )
+        ) {
+          return prev;
+        }
+        return [newEvent, ...prev.slice(0, 99)];
+      });
+    });
+    return unsubscribe;
+  }, [addListener, categoryFilter]);
 
   const handleToggleBlock = async (domain: string, currentStatus: string) => {
     try {

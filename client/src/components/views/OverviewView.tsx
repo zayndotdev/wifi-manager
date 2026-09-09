@@ -33,15 +33,33 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   onNavigateTab,
 }) => {
   const { devices, pauseDevice, resumeDevice, isScanning, scanNetwork } = useDevices();
-  const { latestTick } = useWebSocket();
+  const { latestTick, addListener } = useWebSocket();
   const [recentDomains, setRecentDomains] = React.useState<DomainEvent[]>([]);
 
   // Fetch recent domains
   React.useEffect(() => {
-    api.getRecentDomains('all').then((res) => {
-      setRecentDomains(res.domains.slice(0, 5));
-    }).catch(() => {});
+    api
+      .getRecentDomains('all')
+      .then((res) => {
+        setRecentDomains(res?.domains ? res.domains.slice(0, 5) : []);
+      })
+      .catch(() => {});
   }, []);
+
+  // Real-time DNS live telemetry listener
+  React.useEffect(() => {
+    const unsubscribe = addListener('dns_activity', (payload: any) => {
+      if (!payload?.event) return;
+      const newEvent: DomainEvent = payload.event;
+      setRecentDomains((prev) => {
+        if (prev.some((d) => d.id === newEvent.id || d.domain === newEvent.domain)) {
+          return prev;
+        }
+        return [newEvent, ...prev.slice(0, 4)];
+      });
+    });
+    return unsubscribe;
+  }, [addListener]);
 
   const activeDevices = devices.filter((d) => d.status === 'active');
   const pausedDevices = devices.filter((d) => d.status === 'paused');

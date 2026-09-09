@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { DomainLogModel, IDomainLog } from '../models/DomainLog.model.js';
 import { isConnectedToMongo } from '../config/database.js';
 
@@ -11,7 +12,7 @@ class TrafficService {
   }
 
   private async loadFromMongo() {
-    if (isConnectedToMongo) {
+    if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
       try {
         const docs = await DomainLogModel.find().sort({ timestamp: -1 }).limit(100).lean();
         if (docs.length > 0) {
@@ -24,7 +25,7 @@ class TrafficService {
   }
 
   public async getRecentDomains(category?: string): Promise<{ total: number; domains: any[] }> {
-    if (isConnectedToMongo) {
+    if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
       try {
         const query: any = {};
         if (category && category !== 'all') {
@@ -51,7 +52,7 @@ class TrafficService {
 
   public async blockDomain(domain: string): Promise<any> {
     this.blockedDomains.add(domain.toLowerCase());
-    if (isConnectedToMongo) {
+    if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
       try {
         await DomainLogModel.updateMany(
           { domain: new RegExp(`^${domain}$`, 'i') },
@@ -71,7 +72,7 @@ class TrafficService {
 
   public async unblockDomain(domain: string): Promise<any> {
     this.blockedDomains.delete(domain.toLowerCase());
-    if (isConnectedToMongo) {
+    if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
       try {
         await DomainLogModel.updateMany(
           { domain: new RegExp(`^${domain}$`, 'i') },
@@ -94,7 +95,7 @@ class TrafficService {
       event.status = 'blocked';
     }
 
-    if (isConnectedToMongo) {
+    if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
       try {
         await DomainLogModel.create(event);
       } catch {

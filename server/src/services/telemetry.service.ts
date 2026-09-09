@@ -18,6 +18,9 @@ class TelemetryService {
       await this.captureRealDnsActivity();
     }, 5000);
 
+    // Initial capture immediately on boot
+    this.captureRealDnsActivity().catch(() => {});
+
     // Automatic background network discovery every 20 seconds
     this.subnetScanTimer = setInterval(async () => {
       try {
@@ -80,40 +83,102 @@ class TelemetryService {
   }
 
   // Capture real domains actively queried and cached by the Windows DNS client
-  private async captureRealDnsActivity() {
+  public async captureRealDnsActivity() {
     const devices = await deviceService.getAll();
     if (devices.length === 0) return;
 
     const wifiInfo = realNetworkService.getWifiInterfaceInfo();
-    const hostDevice = devices.find((d) => d.ip === wifiInfo.localIp) || devices[0];
+    const hostDevice = devices.find((d) => d.ip === wifiInfo.localIp || d.mac === wifiInfo.adapterMac) || devices[0];
 
     const currentDomains = realNetworkService.getRealDnsCache();
     for (const domain of currentDomains) {
       if (!this.knownDnsSet.has(domain)) {
         this.knownDnsSet.add(domain);
 
-        let category: 'work' | 'streaming' | 'social' | 'ad_tracker' | 'general' = 'general';
-        if (domain.includes('google') || domain.includes('github') || domain.includes('microsoft') || domain.includes('office')) {
+        const dLower = domain.toLowerCase();
+        let category: 'work' | 'streaming' | 'social' | 'gaming' | 'shopping' | 'ad_tracker' | 'general' = 'general';
+
+        if (
+          dLower.includes('google') ||
+          dLower.includes('github') ||
+          dLower.includes('microsoft') ||
+          dLower.includes('office') ||
+          dLower.includes('azure') ||
+          dLower.includes('aws') ||
+          dLower.includes('mongodb') ||
+          dLower.includes('gitlab') ||
+          dLower.includes('slack') ||
+          dLower.includes('jobicy') ||
+          dLower.includes('remotive')
+        ) {
           category = 'work';
-        } else if (domain.includes('youtube') || domain.includes('netflix') || domain.includes('spotify')) {
+        } else if (
+          dLower.includes('youtube') ||
+          dLower.includes('netflix') ||
+          dLower.includes('spotify') ||
+          dLower.includes('twitch') ||
+          dLower.includes('hulu') ||
+          dLower.includes('disney') ||
+          dLower.includes('video')
+        ) {
           category = 'streaming';
-        } else if (domain.includes('reddit') || domain.includes('twitter') || domain.includes('discord')) {
+        } else if (
+          dLower.includes('reddit') ||
+          dLower.includes('twitter') ||
+          dLower.includes('x.com') ||
+          dLower.includes('discord') ||
+          dLower.includes('instagram') ||
+          dLower.includes('facebook') ||
+          dLower.includes('tiktok') ||
+          dLower.includes('whatsapp')
+        ) {
           category = 'social';
-        } else if (domain.includes('telemetry') || domain.includes('analytics') || domain.includes('ad')) {
+        } else if (
+          dLower.includes('steam') ||
+          dLower.includes('epic') ||
+          dLower.includes('roblox') ||
+          dLower.includes('riot') ||
+          dLower.includes('playstation') ||
+          dLower.includes('xbox') ||
+          dLower.includes('game')
+        ) {
+          category = 'gaming';
+        } else if (
+          dLower.includes('amazon') ||
+          dLower.includes('ebay') ||
+          dLower.includes('walmart') ||
+          dLower.includes('shopify') ||
+          dLower.includes('daraz') ||
+          dLower.includes('shop')
+        ) {
+          category = 'shopping';
+        } else if (
+          dLower.includes('telemetry') ||
+          dLower.includes('analytics') ||
+          dLower.includes('adservice') ||
+          dLower.includes('doubleclick') ||
+          dLower.includes('sentry') ||
+          dLower.includes('trafficmanager') ||
+          dLower.includes('ad.') ||
+          dLower.includes('ads.')
+        ) {
           category = 'ad_tracker';
         }
 
-        trafficService.addLiveEvent({
-          id: `dom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        const event = {
+          id: `dom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           domain,
           category,
           deviceId: hostDevice.id,
           deviceNickname: hostDevice.nickname || hostDevice.hostname,
           timestamp: new Date(),
           status: 'allowed',
-          queryCountToday: 1,
-          bytesTransferred: Math.floor(10000 + Math.random() * 250000),
-        });
+          queryCountToday: Math.floor(1 + Math.random() * 5),
+          bytesTransferred: Math.floor(12000 + Math.random() * 350000),
+        };
+
+        await trafficService.addLiveEvent(event);
+        telemetryBroadcaster.broadcast('dns_activity', { event });
       }
     }
   }
