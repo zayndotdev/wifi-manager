@@ -28,8 +28,14 @@ class DeviceService {
     if (isConnectedToMongo) {
       try {
         const docs = await DeviceModel.find().lean();
-        if (docs.length > 0) return docs;
-        // If empty, perform real network sync
+        const hasDummy = docs.some(
+          (d) =>
+            /^Device-\d+$/i.test(d.nickname || '') ||
+            /^Apple-Device-\d+$/i.test(d.nickname || '') ||
+            /^Samsung-Galaxy-\d+$/i.test(d.nickname || '')
+        );
+        if (docs.length > 0 && !hasDummy) return docs;
+        // If empty or contains old dummy/fabricated names, force a fresh network sync
         await realNetworkService.syncRealDevicesToMongo();
         return await DeviceModel.find().lean();
       } catch {

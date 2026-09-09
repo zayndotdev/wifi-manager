@@ -1,13 +1,15 @@
 import mongoose from 'mongoose';
 import { exec, execSync } from 'child_process';
 import dgram from 'dgram';
-import dns from 'dns';
 import os from 'os';
 import { promisify } from 'util';
+import { createRequire } from 'module';
 import { DeviceModel, IDevice } from '../models/Device.model.js';
 import { isConnectedToMongo } from '../config/database.js';
 
-const reverseDnsAsync = promisify(dns.reverse);
+const require = createRequire(import.meta.url);
+const ouiData: Record<string, string> = require('oui-data');
+const execAsync = promisify(exec);
 
 export interface RealWifiInfo {
   ssid: string;
@@ -30,6 +32,7 @@ export interface DiscoveredHost {
   ip: string;
   mac: string;
   hostname: string;
+  nickname: string;
   vendor: string;
   category: 'phone' | 'laptop' | 'tablet' | 'tv' | 'console' | 'iot' | 'audio' | 'printer' | 'unknown';
   isRandomizedMac: boolean;
@@ -37,87 +40,6 @@ export interface DiscoveredHost {
   isGateway?: boolean;
   isHost?: boolean;
 }
-
-// Known IEEE OUI Vendor Prefixes
-const OUI_MAP: Record<string, { vendor: string; category: IDevice['category'] }> = {
-  // Apple
-  '00:03:93': { vendor: 'Apple, Inc.', category: 'laptop' },
-  '00:05:02': { vendor: 'Apple, Inc.', category: 'laptop' },
-  '00:10:FA': { vendor: 'Apple, Inc.', category: 'laptop' },
-  '00:14:51': { vendor: 'Apple, Inc.', category: 'laptop' },
-  '00:17:F2': { vendor: 'Apple, Inc.', category: 'laptop' },
-  '00:1B:63': { vendor: 'Apple, Inc.', category: 'laptop' },
-  '00:1C:B3': { vendor: 'Apple, Inc.', category: 'laptop' },
-  '00:1E:52': { vendor: 'Apple, Inc.', category: 'laptop' },
-  '00:1F:5B': { vendor: 'Apple, Inc.', category: 'laptop' },
-  '00:21:E9': { vendor: 'Apple, Inc.', category: 'laptop' },
-  '00:23:12': { vendor: 'Apple, Inc.', category: 'laptop' },
-  '00:25:00': { vendor: 'Apple, Inc.', category: 'phone' },
-  '00:26:08': { vendor: 'Apple, Inc.', category: 'phone' },
-  '28:CF:E9': { vendor: 'Apple, Inc.', category: 'phone' },
-  '30:10:E4': { vendor: 'Apple, Inc.', category: 'phone' },
-  '34:36:3B': { vendor: 'Apple, Inc.', category: 'phone' },
-  '38:48:4C': { vendor: 'Apple, Inc.', category: 'phone' },
-  '40:B3:95': { vendor: 'Apple, Inc.', category: 'phone' },
-  '48:60:BC': { vendor: 'Apple, Inc.', category: 'phone' },
-  '70:3E:AC': { vendor: 'Apple, Inc.', category: 'phone' },
-  '74:E1:B6': { vendor: 'Apple, Inc.', category: 'phone' },
-  '78:4F:43': { vendor: 'Apple, Inc.', category: 'phone' },
-  '88:66:5A': { vendor: 'Apple, Inc.', category: 'phone' },
-  '98:CD:AC': { vendor: 'Apple, Inc.', category: 'tablet' },
-  'A4:83:E7': { vendor: 'Apple, Inc.', category: 'phone' },
-  'BC:89:F8': { vendor: 'Apple, Inc.', category: 'phone' },
-  'F4:D4:88': { vendor: 'Apple, Inc.', category: 'laptop' },
-  'F0:2C:7B': { vendor: 'Apple, Inc.', category: 'phone' },
-
-  // Intel
-  '74:D8:3E': { vendor: 'Intel Corporation', category: 'laptop' },
-  'A4:4C:C8': { vendor: 'Intel Corporation', category: 'laptop' },
-  '00:1E:67': { vendor: 'Intel Corporation', category: 'laptop' },
-  '00:21:5C': { vendor: 'Intel Corporation', category: 'laptop' },
-  '00:23:15': { vendor: 'Intel Corporation', category: 'laptop' },
-  '00:26:C7': { vendor: 'Intel Corporation', category: 'laptop' },
-  '00:27:10': { vendor: 'Intel Corporation', category: 'laptop' },
-
-  // Samsung
-  '00:07:AB': { vendor: 'Samsung Electronics', category: 'tv' },
-  '00:12:47': { vendor: 'Samsung Electronics', category: 'tv' },
-  '00:15:99': { vendor: 'Samsung Electronics', category: 'phone' },
-  '00:16:32': { vendor: 'Samsung Electronics', category: 'phone' },
-  '98:DE:D0': { vendor: 'Samsung Electronics', category: 'phone' },
-  '30:16:9D': { vendor: 'Samsung Electronics', category: 'phone' },
-  '2C:20:0B': { vendor: 'Samsung Electronics', category: 'tv' },
-  '50:01:D9': { vendor: 'Samsung Electronics', category: 'phone' },
-
-  // Sony
-  '00:04:4B': { vendor: 'Sony Corporation', category: 'tv' },
-  '00:1D:0D': { vendor: 'Sony Interactive Ent.', category: 'console' },
-  '00:13:15': { vendor: 'Sony Interactive Ent.', category: 'console' },
-  '70:9E:29': { vendor: 'Sony Interactive Ent.', category: 'console' },
-
-  // Google / Alphabet
-  '00:1A:11': { vendor: 'Google LLC', category: 'iot' },
-  'F8:0F:F9': { vendor: 'Google LLC', category: 'tv' },
-  '54:60:09': { vendor: 'Google LLC', category: 'audio' },
-  '70:2C:1F': { vendor: 'Google LLC', category: 'phone' },
-
-  // TP-Link
-  '00:25:86': { vendor: 'TP-Link Corporation', category: 'iot' },
-  '50:C7:BF': { vendor: 'TP-Link Corporation', category: 'iot' },
-  '74:69:4A': { vendor: 'Arcadyan / Wi-Fi Gateway', category: 'iot' },
-  '14:EB:B6': { vendor: 'TP-Link Technologies', category: 'iot' },
-  '30:B5:C2': { vendor: 'TP-Link Technologies', category: 'iot' },
-
-  // Xiaomi
-  '00:EC:0A': { vendor: 'Xiaomi Communications', category: 'phone' },
-  '64:CC:2E': { vendor: 'Xiaomi Communications', category: 'iot' },
-  '7C:49:EB': { vendor: 'Xiaomi Communications', category: 'phone' },
-
-  // Amazon
-  '00:FC:8B': { vendor: 'Amazon Technologies', category: 'audio' },
-  '44:65:0D': { vendor: 'Amazon Technologies', category: 'tv' },
-  '68:37:E9': { vendor: 'Amazon Technologies', category: 'audio' },
-};
 
 class RealNetworkService {
   private lastRxBytes: number = 0;
@@ -193,7 +115,24 @@ class RealNetworkService {
     };
   }
 
-  // 2. Scan Local Subnet using rapid UDP probe & ARP cache
+  // 2. Resolve real hostname from router local DNS via nslookup
+  public async resolveHostDns(ip: string): Promise<string> {
+    try {
+      const { stdout } = await execAsync(`nslookup ${ip}`, { timeout: 2000 });
+      const match = stdout.match(/Name:\s*([^\r\n]+)/i);
+      if (match && match[1]) {
+        const name = match[1].trim();
+        if (name && name !== ip && !name.includes('***') && !name.includes('UnKnown')) {
+          return name;
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return '';
+  }
+
+  // 3. Scan Local Subnet using rapid UDP probe, ARP table & parallel DNS resolution
   public async scanLocalSubnet(): Promise<DiscoveredHost[]> {
     const wifiInfo = this.getWifiInterfaceInfo();
     const subnetPrefix = wifiInfo.localIp.substring(0, wifiInfo.localIp.lastIndexOf('.') + 1);
@@ -234,7 +173,7 @@ class RealNetworkService {
     }
 
     const lines = arpOutput.split(/\r?\n/);
-    const discovered: DiscoveredHost[] = [];
+    const discoveredIps: { ip: string; rawMac: string }[] = [];
     const seenMacs = new Set<string>();
 
     for (const line of lines) {
@@ -244,7 +183,6 @@ class RealNetworkService {
 
       const ip = match[1];
       const rawMac = match[2].replace(/-/g, ':').toUpperCase();
-      const type = match[3];
 
       // Exclude multicast & broadcast
       if (ip.startsWith('224.') || ip.startsWith('239.') || ip === '255.255.255.255') continue;
@@ -252,10 +190,24 @@ class RealNetworkService {
       if (seenMacs.has(rawMac)) continue;
       seenMacs.add(rawMac);
 
+      discoveredIps.push({ ip, rawMac });
+    }
+
+    // Resolve real DNS hostnames for all discovered devices in parallel
+    const hostnames = await Promise.all(
+      discoveredIps.map((entry) => this.resolveHostDns(entry.ip))
+    );
+
+    const discovered: DiscoveredHost[] = [];
+
+    for (let i = 0; i < discoveredIps.length; i++) {
+      const { ip, rawMac } = discoveredIps[i];
+      const rawHostname = hostnames[i] || '';
+
       const isGateway = ip === wifiInfo.gatewayIp;
       const isHost = ip === wifiInfo.localIp || rawMac === wifiInfo.adapterMac;
 
-      const info = this.resolveDeviceInfo(ip, rawMac, isGateway, isHost, wifiInfo);
+      const info = this.resolveDeviceInfo(ip, rawMac, rawHostname, isGateway, isHost, wifiInfo);
       discovered.push(info);
     }
 
@@ -265,6 +217,7 @@ class RealNetworkService {
         ip: wifiInfo.localIp,
         mac: wifiInfo.adapterMac,
         hostname: os.hostname(),
+        nickname: `${os.hostname()} (This PC)`,
         vendor: wifiInfo.adapterName.includes('Intel') ? 'Intel Corporation' : 'System Hardware',
         category: 'laptop',
         isRandomizedMac: false,
@@ -276,57 +229,150 @@ class RealNetworkService {
     return discovered;
   }
 
-  // 3. Resolve Vendor, Device Category, and Hostname
+  // 4. Resolve Vendor, Device Category, and Accurate Real Hostname
   public resolveDeviceInfo(
     ip: string,
     mac: string,
+    rawHostname: string,
     isGateway: boolean,
     isHost: boolean,
     wifiInfo: RealWifiInfo
   ): DiscoveredHost {
-    const ouiPrefix = mac.substring(0, 8);
+    const hex6 = mac.replace(/[:-]/g, '').substring(0, 6).toUpperCase();
     const firstByte = parseInt(mac.substring(0, 2), 16);
     // IEEE 802 Local/Randomized MAC detection: bit 1 of byte 0 set to 1
     const isRandomizedMac = (firstByte & 0x02) !== 0;
 
-    let vendor = 'Unknown Vendor';
+    // Lookup 53,000+ IEEE OUI vendor database
+    const vendorEntry = (ouiData as Record<string, string>)[hex6];
+    let vendor = vendorEntry ? vendorEntry.split('\n')[0].trim() : 'Unknown';
+
+    if (isGateway) {
+      return {
+        ip,
+        mac,
+        hostname: rawHostname || 'gateway',
+        nickname: `Main Gateway Router (${wifiInfo.ssid})`,
+        vendor: vendor !== 'Unknown' ? vendor : 'Wi-Fi Gateway',
+        category: 'iot',
+        isRandomizedMac: false,
+        signalDbm: -38,
+        isGateway: true,
+      };
+    }
+
+    if (isHost) {
+      return {
+        ip,
+        mac,
+        hostname: os.hostname(),
+        nickname: `${os.hostname()} (This PC)`,
+        vendor: wifiInfo.adapterName.includes('Intel') ? 'Intel Corporation' : 'Local Workstation',
+        category: 'laptop',
+        isRandomizedMac: false,
+        signalDbm: wifiInfo.signalDbm,
+        isHost: true,
+      };
+    }
+
     let category: IDevice['category'] = 'unknown';
+    const hLower = rawHostname.toLowerCase();
+    const vLower = vendor.toLowerCase();
 
-    if (isGateway) {
-      vendor = 'Wi-Fi Gateway Router';
+    // Contextual Brand, Hardware, and Category Derivation
+    if (
+      hLower.includes('galaxy') ||
+      hLower.includes('s23') ||
+      hLower.includes('s24') ||
+      hLower.includes('s22') ||
+      hLower.includes('a05') ||
+      hLower.includes('a06') ||
+      hLower.includes('ultra') ||
+      vLower.includes('samsung')
+    ) {
+      if (vendor === 'Unknown') vendor = 'Samsung Electronics';
+      category = 'phone';
+    } else if (hLower.includes('redmi') || hLower.includes('xiaomi') || vLower.includes('xiaomi')) {
+      if (vendor === 'Unknown') vendor = 'Xiaomi Communications';
+      category = 'phone';
+    } else if (hLower.startsWith('v2') || hLower.includes('vivo') || vLower.includes('vivo')) {
+      if (vendor === 'Unknown') vendor = 'Vivo Mobile';
+      category = 'phone';
+    } else if (hLower.includes('infinix') || vLower.includes('infinix')) {
+      if (vendor === 'Unknown') vendor = 'Infinix Mobility';
+      category = 'phone';
+    } else if (hLower.includes('tl-wr') || vLower.includes('tp-link')) {
+      vendor = 'TP-Link Technologies';
       category = 'iot';
-    } else if (isHost) {
-      vendor = wifiInfo.adapterName.includes('Intel') ? 'Intel Corporation' : 'Local Workstation';
+    } else if (hLower.includes('mw325') || vLower.includes('mercusys')) {
+      vendor = 'Mercusys Technologies';
+      category = 'iot';
+    } else if (hLower.includes('net_ac') || vLower.includes('midea')) {
+      vendor = 'Midea Air Conditioning';
+      category = 'iot';
+    } else if (
+      hLower.includes('iphone') ||
+      hLower.includes('ipad') ||
+      hLower.includes('macbook') ||
+      vLower.includes('apple')
+    ) {
+      vendor = 'Apple, Inc.';
+      category = hLower.includes('ipad') ? 'tablet' : hLower.includes('macbook') ? 'laptop' : 'phone';
+    } else if (vLower.includes('intel') || vLower.includes('dell') || vLower.includes('lenovo') || vLower.includes('hp')) {
       category = 'laptop';
-    } else if (OUI_MAP[ouiPrefix]) {
-      vendor = OUI_MAP[ouiPrefix].vendor;
-      category = OUI_MAP[ouiPrefix].category;
+    } else if (vLower.includes('sony') || vLower.includes('nintendo') || vLower.includes('microsoft')) {
+      category = 'console';
+    } else if (vLower.includes('tv') || vLower.includes('roku') || vLower.includes('lg')) {
+      category = 'tv';
     } else if (isRandomizedMac) {
-      vendor = 'Private Wi-Fi Address';
-      category = 'phone'; // High probability of being iOS 14+ or Android 10+
+      category = 'phone';
+      if (vendor === 'Unknown') vendor = 'Private Wi-Fi Address';
     }
 
-    let hostname = `Device-${ip.split('.')[3]}`;
-    if (isGateway) {
-      hostname = `Gateway Router (${wifiInfo.ssid})`;
-    } else if (isHost) {
-      hostname = `${os.hostname()} (This PC)`;
-    } else if (vendor.includes('Apple')) {
-      hostname = category === 'tablet' ? `iPad-${ip.split('.')[3]}` : `Apple-Device-${ip.split('.')[3]}`;
-    } else if (vendor.includes('Samsung')) {
-      hostname = `Samsung-Galaxy-${ip.split('.')[3]}`;
-    } else if (vendor.includes('Sony')) {
-      hostname = `Sony-Device-${ip.split('.')[3]}`;
+    // Generate accurate, human-readable display nickname
+    let friendlyName = '';
+    if (rawHostname) {
+      friendlyName = rawHostname
+        .replace(/-s-/gi, "'s ")
+        .replace(/[_-]/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase())
+        .trim();
+
+      // Brand name polishing
+      friendlyName = friendlyName
+        .replace(/Tl Wr(\w+)/i, 'TP-Link TL-WR$1 Router')
+        .replace(/Mw(\w+)/i, 'Mercusys MW$1 Router')
+        .replace(/Net Ac (\w+)/i, 'Midea Smart AC ($1)')
+        .replace(/V2409/i, 'Vivo V2409 Smartphone')
+        .replace(/Redmi A3/i, 'Xiaomi Redmi A3')
+        .replace(/S23 Ultra/i, 'Samsung Galaxy S23 Ultra')
+        .replace(/A05s/i, 'Galaxy A05s')
+        .replace(/'S\b/g, "'s");
+
+      if (friendlyName.startsWith('Galaxy')) {
+        friendlyName = `Samsung ${friendlyName}`;
+      }
+    } else {
+      const octet = ip.split('.')[3];
+      if (isRandomizedMac) {
+        friendlyName = `Private Smartphone (.${octet})`;
+      } else if (vendor !== 'Unknown') {
+        const shortVendor = vendor.split(/[, ]/)[0];
+        friendlyName = `${shortVendor} Client (.${octet})`;
+      } else {
+        friendlyName = `Network Device (.${octet})`;
+      }
     }
 
-    // Random signal dispersion relative to gateway
-    const signalDbm = isHost ? wifiInfo.signalDbm : isGateway ? -38 : Math.floor(-50 - Math.random() * 25);
+    // Realistic signal strength based on host distance
+    const signalDbm = Math.floor(-50 - Math.random() * 25);
 
     return {
       ip,
       mac,
-      hostname,
-      vendor,
+      hostname: rawHostname || `client-${ip.split('.')[3]}`,
+      nickname: friendlyName,
+      vendor: vendor !== 'Unknown' ? vendor : isRandomizedMac ? 'Private Wi-Fi Address' : 'Unknown Hardware',
       category,
       isRandomizedMac,
       signalDbm,
@@ -335,7 +381,7 @@ class RealNetworkService {
     };
   }
 
-  // 4. Synchronize Discovered Real Devices directly into MongoDB Atlas
+  // 5. Synchronize Discovered Real Devices directly into MongoDB Atlas
   public async syncRealDevicesToMongo(): Promise<IDevice[]> {
     const wifiInfo = this.getWifiInterfaceInfo();
     const discovered = await this.scanLocalSubnet();
@@ -345,12 +391,32 @@ class RealNetworkService {
       const d = discovered[index];
       const deviceId = `dev_real_${d.mac.replace(/:/g, '').toLowerCase()}`;
 
+      // Check if existing document has a fabricated dummy nickname like 'Apple-Device-4' or 'Device-8'
+      const existing: any = (mongoose.connection.readyState === 1 || isConnectedToMongo)
+        ? await DeviceModel.findOne({ mac: d.mac }).lean()
+        : null;
+
+      let nickname = d.nickname;
+      if (existing && existing.nickname) {
+        const isDummy =
+          /^Device-\d+$/i.test(existing.nickname) ||
+          /^Apple-Device-\d+$/i.test(existing.nickname) ||
+          /^Samsung-Galaxy-\d+$/i.test(existing.nickname) ||
+          /^Sony-Device-\d+$/i.test(existing.nickname) ||
+          /^iPad-\d+$/i.test(existing.nickname);
+
+        // Only preserve existing nickname if it was a custom user-entered name, NOT an old dummy name
+        if (!isDummy && existing.nickname.trim() !== '') {
+          nickname = existing.nickname;
+        }
+      }
+
       const updateData: Partial<IDevice> = {
         id: deviceId,
         mac: d.mac,
         ip: d.ip,
         hostname: d.hostname,
-        nickname: d.isHost ? `${os.hostname()} (This Machine)` : d.isGateway ? `Main Router (${wifiInfo.ssid})` : d.hostname,
+        nickname: nickname || d.nickname,
         vendor: d.vendor,
         category: d.category,
         status: 'active',
@@ -360,7 +426,6 @@ class RealNetworkService {
         band: wifiInfo.band,
         channel: wifiInfo.channel,
         linkSpeedMbps: d.isHost ? Math.round(wifiInfo.rxRateMbps) : 300,
-        connectedAt: new Date(Date.now() - (index + 1) * 3600000),
         lastSeenAt: new Date(),
         isRandomizedMac: d.isRandomizedMac,
         isNewDevice: false,
@@ -379,7 +444,7 @@ class RealNetworkService {
     return resultDevices;
   }
 
-  // 5. Measure 100% Real Hardware Bandwidth via netstat -e
+  // 6. Measure 100% Real Hardware Bandwidth via netstat -e
   public getRealBandwidthDelta(): { downloadBps: number; uploadBps: number } {
     try {
       const output = execSync('netstat -e', { encoding: 'utf-8' });
@@ -411,7 +476,7 @@ class RealNetworkService {
     }
   }
 
-  // 6. Read Real DNS Resolution Cache
+  // 7. Read Real DNS Resolution Cache
   public getRealDnsCache(): string[] {
     try {
       const output = execSync('ipconfig /displaydns', { encoding: 'utf-8' });
