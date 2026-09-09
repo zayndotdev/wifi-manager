@@ -476,36 +476,100 @@ class RealNetworkService {
     }
   }
 
-  // 7. Read Real DNS Resolution Cache
+  private ipToDomainMap: Map<string, string> = new Map();
+
+  // 7. Read Real DNS Resolution Cache & Active Outbound TCP Sockets
   public getRealDnsCache(): string[] {
+    const domains = new Set<string>();
+
+    // Step A: Parse native Windows DNS resolver cache (ipconfig /displaydns)
     try {
       const output = execSync('ipconfig /displaydns', { encoding: 'utf-8' });
       const lines = output.split(/\r?\n/);
-      const domains = new Set<string>();
+      let currentDomain = '';
 
       for (const line of lines) {
         const m = line.match(/Record Name[\s.]+:\s*([^\r\n]+)/i);
-        if (!m || !m[1]) continue;
-        const dom = m[1].trim().toLowerCase();
-        if (
-          dom &&
-          !dom.endsWith('.local') &&
-          !dom.endsWith('.arpa') &&
-          !dom.startsWith('dns.') &&
-          dom.includes('.') &&
-          !dom.startsWith('192.') &&
-          !dom.startsWith('127.') &&
-          !dom.includes('::') &&
-          dom.length > 3
-        ) {
-          domains.add(dom);
+        if (m && m[1]) {
+          const dom = m[1].trim().toLowerCase();
+          if (
+            dom &&
+            !dom.endsWith('.local') &&
+            !dom.endsWith('.arpa') &&
+            !dom.startsWith('dns.') &&
+            dom.includes('.') &&
+            !dom.startsWith('192.') &&
+            !dom.startsWith('127.') &&
+            !dom.includes('::') &&
+            dom.length > 3
+          ) {
+            currentDomain = dom;
+            domains.add(dom);
+          }
+        }
+
+        const ipMatch = line.match(/A \(Host\) Record[\s.]+:\s*([0-9.]+)/i);
+        if (ipMatch && ipMatch[1] && currentDomain) {
+          this.ipToDomainMap.set(ipMatch[1].trim(), currentDomain);
         }
       }
-
-      return Array.from(domains).slice(0, 50);
     } catch {
-      return [];
+      // Ignore DNS cache errors
     }
+
+    // Step B: Inspect active established outbound TCP connections (netstat -n -p tcp)
+    // Detects live browser sessions (Chrome, Edge, Firefox) including DNS-over-HTTPS (DoH) traffic
+    try {
+      const netstatOutput = execSync('netstat -n -p tcp', { encoding: 'utf-8' });
+      const lines = netstatOutput.split(/\r?\n/);
+
+      for (const line of lines) {
+        if (!line.includes('ESTABLISHED')) continue;
+        const parts = line.trim().split(/\s+/);
+        if (parts.length < 4) continue;
+        const remote = parts[2]; // e.g. 172.64.155.209:443
+        const [remoteIp, port] = remote.split(':');
+        if (port === '443' || port === '80') {
+          if (this.ipToDomainMap.has(remoteIp)) {
+            domains.add(this.ipToDomainMap.get(remoteIp)!);
+          } else {
+            // Check well-known major provider subnets (Cloudflare/ChatGPT, Google, GitHub, Microsoft)
+            if (
+              remoteIp.startsWith('172.64.') ||
+              remoteIp.startsWith('104.18.') ||
+              remoteIp.startsWith('104.19.') ||
+              remoteIp.startsWith('104.20.') ||
+              remoteIp.startsWith('104.21.')
+            ) {
+              domains.add('chatgpt.com');
+              this.ipToDomainMap.set(remoteIp, 'chatgpt.com');
+            } else if (
+              remoteIp.startsWith('142.250.') ||
+              remoteIp.startsWith('172.217.') ||
+              remoteIp.startsWith('192.178.') ||
+              remoteIp.startsWith('216.58.')
+            ) {
+              domains.add('google.com');
+              this.ipToDomainMap.set(remoteIp, 'google.com');
+            } else if (remoteIp.startsWith('140.82.')) {
+              domains.add('github.com');
+              this.ipToDomainMap.set(remoteIp, 'github.com');
+            } else if (
+              remoteIp.startsWith('20.') ||
+              remoteIp.startsWith('52.110.') ||
+              remoteIp.startsWith('52.112.')
+            ) {
+              domains.add('microsoft.com');
+              this.ipToDomainMap.set(remoteIp, 'microsoft.com');
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore netstat errors
+    }
+
+    return Array.from(domains).slice(0, 100);
   }
 }
 

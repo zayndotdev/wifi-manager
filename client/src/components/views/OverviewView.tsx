@@ -52,10 +52,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       if (!payload?.event) return;
       const newEvent: DomainEvent = payload.event;
       setRecentDomains((prev) => {
-        if (prev.some((d) => d.id === newEvent.id || d.domain === newEvent.domain)) {
-          return prev;
-        }
-        return [newEvent, ...prev.slice(0, 4)];
+        const filtered = prev.filter((d) => d.domain.toLowerCase() !== newEvent.domain.toLowerCase());
+        return [newEvent, ...filtered.slice(0, 4)];
       });
     });
     return unsubscribe;

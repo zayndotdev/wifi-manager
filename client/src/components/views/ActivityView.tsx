@@ -50,17 +50,8 @@ export const ActivityView: React.FC = () => {
       const newEvent: DomainEvent = payload.event;
       if (categoryFilter !== 'all' && newEvent.category !== categoryFilter) return;
       setDomains((prev) => {
-        if (
-          prev.some(
-            (d) =>
-              d.id === newEvent.id ||
-              (d.domain === newEvent.domain &&
-                Math.abs(new Date(d.timestamp).getTime() - new Date(newEvent.timestamp).getTime()) < 3000)
-          )
-        ) {
-          return prev;
-        }
-        return [newEvent, ...prev.slice(0, 99)];
+        const filtered = prev.filter((d) => d.domain.toLowerCase() !== newEvent.domain.toLowerCase());
+        return [newEvent, ...filtered.slice(0, 99)];
       });
     });
     return unsubscribe;
