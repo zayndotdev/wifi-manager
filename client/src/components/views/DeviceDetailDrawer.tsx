@@ -80,13 +80,13 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
       title={device.nickname || device.hostname}
       subtitle={`${device.vendor} • ${device.ip}`}
     >
-      <div className="space-y-6 text-xs">
+      <div className="space-y-4 text-xs">
         {/* Full Details Page CTA */}
         {onOpenFullDetails && (
           <Button
             variant="primary"
             size="sm"
-            className="w-full gap-2 font-medium bg-primary hover:bg-primary/90 text-white shadow-sm"
+            className="w-full gap-2 font-medium bg-primary hover:bg-primary/90 text-white shadow-xs py-2 text-xs rounded-xl transition-all"
             onClick={() => {
               onClose();
               onOpenFullDetails(device.id);
@@ -98,11 +98,11 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
         )}
 
         {/* Top Action Bar */}
-        <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-secondary/40">
+        <div className="flex items-center gap-2 p-2 rounded-xl border border-border/80 bg-secondary/30">
           <Button
             variant={isPaused ? 'primary' : 'secondary'}
             size="sm"
-            className="flex-1 gap-1.5"
+            className="flex-1 gap-1.5 h-7 text-xs rounded-lg"
             onClick={() => (isPaused ? resumeDevice(device.id) : pauseDevice(device.id))}
           >
             {isPaused ? <Play className="h-3 w-3 fill-current" /> : <Pause className="h-3 w-3" />}
@@ -112,7 +112,7 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5"
+            className="gap-1.5 h-7 text-xs rounded-lg border-border"
             onClick={() => {
               onClose();
               onOpenThrottleModal(device);
@@ -125,23 +125,23 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
 
         {/* Real-time Speeds & Data */}
         <div>
-          <h4 className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider text-[10px] text-foreground-secondary">
+          <h4 className="font-semibold uppercase tracking-wider text-[10px] text-foreground-secondary mb-1.5">
             Live Bandwidth Telemetry
           </h4>
-          <div className="grid grid-cols-2 gap-3 p-3 rounded-lg border border-border bg-card">
+          <div className="grid grid-cols-2 gap-2.5 p-2.5 rounded-xl border border-border/80 bg-card/60">
             <div>
               <span className="text-[10px] text-foreground-muted block">Download Rate</span>
-              <span className="font-mono text-base font-semibold text-emerald-600 dark:text-emerald-400">
+              <span className="font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                 {formatSpeed(device.currentDownloadBps)}
               </span>
             </div>
             <div>
               <span className="text-[10px] text-foreground-muted block">Upload Rate</span>
-              <span className="font-mono text-base font-semibold text-primary">
+              <span className="font-mono text-sm font-semibold text-primary">
                 {formatSpeed(device.currentUploadBps)}
               </span>
             </div>
-            <div className="pt-2 border-t border-border col-span-2 flex items-center justify-between">
+            <div className="pt-2 border-t border-border/60 col-span-2 flex items-center justify-between text-[11px]">
               <span className="text-foreground-secondary">Today's Total Usage</span>
               <span className="font-semibold text-foreground font-mono">
                 {formatBytes(device.todayBytesTotal)}
@@ -152,40 +152,40 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
 
         {/* Network & Hardware Identity */}
         <div>
-          <h4 className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider text-[10px] text-foreground-secondary">
+          <h4 className="font-semibold uppercase tracking-wider text-[10px] text-foreground-secondary mb-1.5">
             Hardware & Network Parameters
           </h4>
-          <div className="divide-y divide-border rounded-lg border border-border bg-card p-3 space-y-2">
+          <div className="divide-y divide-border/60 rounded-xl border border-border/80 bg-card/60 px-3 py-1 space-y-1 text-[11px]">
             <div className="flex justify-between items-center py-1">
               <span className="text-foreground-secondary">MAC Address</span>
               <span className="font-mono font-medium text-foreground">{device.mac}</span>
             </div>
             <div className="flex justify-between items-center py-1">
               <span className="text-foreground-secondary">Private MAC (Randomized)</span>
-              <span>{device.isRandomizedMac ? 'Yes (iOS/Android)' : 'No (Hardware MAC)'}</span>
+              <span className="font-medium">{device.isRandomizedMac ? 'Yes (iOS/Android)' : 'No (Hardware)'}</span>
             </div>
             <div className="flex justify-between items-center py-1">
               <span className="text-foreground-secondary">IP Address</span>
-              <span className="font-mono text-foreground">{device.ip}</span>
+              <span className="font-mono text-foreground font-medium">{device.ip}</span>
             </div>
             {device.ipv6 && (
               <div className="flex justify-between items-center py-1">
                 <span className="text-foreground-secondary">IPv6 Address</span>
-                <span className="font-mono text-[10px] text-foreground-muted truncate max-w-[180px]">
+                <span className="font-mono text-[10px] text-foreground-muted truncate max-w-[150px]">
                   {device.ipv6}
                 </span>
               </div>
             )}
             <div className="flex justify-between items-center py-1">
-              <span className="text-foreground-secondary">Hardware Manufacturer</span>
-              <span className="text-foreground font-medium">{device.vendor}</span>
+              <span className="text-foreground-secondary">Manufacturer</span>
+              <span className="text-foreground font-medium truncate max-w-[150px] text-right">{device.vendor}</span>
             </div>
             <div className="flex justify-between items-center py-1">
-              <span className="text-foreground-secondary">Device Category</span>
+              <span className="text-foreground-secondary">Category</span>
               <select
                 value={device.category}
                 onChange={(e) => updateCategory(device.id, e.target.value)}
-                className="h-6 text-xs rounded border border-border bg-secondary px-2 text-foreground"
+                className="h-5 text-[11px] rounded border border-border bg-secondary/80 px-1.5 text-foreground cursor-pointer"
               >
                 {categories.map((c) => (
                   <option key={c} value={c}>
@@ -199,10 +199,10 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
 
         {/* Wi-Fi Radio & Proximity */}
         <div>
-          <h4 className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider text-[10px] text-foreground-secondary">
+          <h4 className="font-semibold uppercase tracking-wider text-[10px] text-foreground-secondary mb-1.5">
             Wireless Radio & Proximity
           </h4>
-          <div className="divide-y divide-border rounded-lg border border-border bg-card p-3 space-y-2">
+          <div className="divide-y divide-border/60 rounded-xl border border-border/80 bg-card/60 px-3 py-1 space-y-1 text-[11px]">
             <div className="flex justify-between items-center py-1">
               <span className="text-foreground-secondary">Connected Access Point</span>
               <span className="font-medium text-foreground">{device.meshNodeName}</span>
@@ -228,19 +228,19 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
 
         {/* Recent Visited Domains */}
         <div>
-          <h4 className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider text-[10px] text-foreground-secondary">
+          <h4 className="font-semibold uppercase tracking-wider text-[10px] text-foreground-secondary mb-1.5">
             Recent Domains Visited by This Device
           </h4>
-          <div className="rounded-lg border border-border bg-card p-3 space-y-2">
+          <div className="rounded-xl border border-border/80 bg-card/60 p-2.5 space-y-1.5 text-[11px]">
             {deviceDomains.length === 0 ? (
-              <p className="text-foreground-muted text-[11px] py-2 text-center">
-                No recent domain queries logged for this device.
+              <p className="text-foreground-muted text-[11px] py-1.5 text-center">
+                No recent domain queries logged.
               </p>
             ) : (
-              deviceDomains.map((dom) => (
-                <div key={dom.id} className="flex items-center justify-between py-1 border-b border-border/50 last:border-0">
-                  <span className="font-medium text-foreground truncate">{dom.domain}</span>
-                  <Badge variant={dom.status === 'blocked' ? 'blocked' : 'neutral'} className="text-[10px]">
+              deviceDomains.slice(0, 3).map((dom) => (
+                <div key={dom.id} className="flex items-center justify-between py-1 border-b border-border/40 last:border-0">
+                  <span className="font-medium text-foreground truncate max-w-[200px]">{dom.domain}</span>
+                  <Badge variant={dom.status === 'blocked' ? 'blocked' : 'neutral'} className="text-[9px] px-1 py-0">
                     {dom.category}
                   </Badge>
                 </div>
@@ -250,34 +250,34 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
         </div>
 
         {/* Danger Zone Actions */}
-        <div className="pt-4 border-t border-border space-y-2">
-          <h4 className="text-xs font-semibold text-rose-600 mb-2 uppercase tracking-wider text-[10px]">
+        <div className="pt-3 border-t border-border/70 space-y-1.5">
+          <h4 className="font-semibold text-rose-600 uppercase tracking-wider text-[10px]">
             Access Governance & Restriction
           </h4>
           <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-900/40 dark:hover:bg-rose-950/20"
+              className="flex-1 text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-900/40 dark:hover:bg-rose-950/20 h-7 text-xs rounded-lg"
               onClick={() => {
                 onClose();
                 onOpenKickModal(device);
               }}
             >
-              <UserX className="h-3.5 w-3.5 mr-1.5" />
-              Kick Off Network
+              <UserX className="h-3 w-3 mr-1.5" />
+              Kick Off
             </Button>
             <Button
               variant="destructive"
               size="sm"
-              className="flex-1"
+              className="flex-1 h-7 text-xs rounded-lg"
               onClick={() => {
                 blockDevice(device.id, 'Blocked from drawer');
                 onClose();
               }}
             >
-              <Ban className="h-3.5 w-3.5 mr-1.5" />
-              Ban MAC Address
+              <Ban className="h-3 w-3 mr-1.5" />
+              Ban MAC
             </Button>
           </div>
         </div>

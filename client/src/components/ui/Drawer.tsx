@@ -17,7 +17,7 @@ export const Drawer: React.FC<DrawerProps> = ({
   title,
   subtitle,
   children,
-  width = 'max-w-md',
+  width = 'w-[370px] sm:w-[390px]',
 }) => {
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -30,38 +30,51 @@ export const Drawer: React.FC<DrawerProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-hidden pointer-events-none">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/30 backdrop-blur-xs transition-opacity animate-fade-in"
+        className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-fade-in pointer-events-auto"
         onClick={onClose}
       />
 
-      <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
-        <div
-          className={cn(
-            'w-screen bg-card border-l border-border shadow-popover flex flex-col transition-all duration-200 animate-fade-in',
-            width
-          )}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-            <div>
-              {title && <h2 className="text-sm font-semibold text-foreground tracking-tight">{title}</h2>}
-              {subtitle && <p className="text-xs text-foreground-secondary mt-0.5">{subtitle}</p>}
-            </div>
-            <button
-              onClick={onClose}
-              className="rounded-md p-1.5 text-foreground-muted hover:text-foreground hover:bg-secondary transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
+      {/* Floating Condensed Drawer with Edge Gaps & Rounded Corners */}
+      <aside
+        className={cn(
+          'fixed top-3.5 bottom-3.5 right-3.5 sm:top-4 sm:bottom-4 sm:right-4 z-50 flex flex-col',
+          'max-w-[calc(100vw-1.75rem)]',
+          'bg-card border border-border/80 shadow-2xl rounded-2xl overflow-hidden pointer-events-auto',
+          'transition-all duration-200 animate-fade-in',
+          width
+        )}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/70 bg-secondary/30 shrink-0">
+          <div className="min-w-0 flex-1 pr-2">
+            {title && (
+              <h2 className="text-xs font-semibold text-foreground tracking-tight truncate">
+                {title}
+              </h2>
+            )}
+            {subtitle && (
+              <p className="text-[11px] text-foreground-secondary mt-0.5 truncate">
+                {subtitle}
+              </p>
+            )}
           </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-5">{children}</div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-foreground-muted hover:text-foreground hover:bg-secondary transition-colors shrink-0 cursor-pointer"
+            aria-label="Close drawer"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-      </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
+          {children}
+        </div>
+      </aside>
     </div>
   );
 };
