@@ -18,21 +18,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-
-const isSystemNoiseDomain = (domain: string) => {
-  const d = domain.toLowerCase();
-  return (
-    d.includes('mongodb.net') ||
-    d.includes('mongodb.com') ||
-    d.includes('compute.amazonaws.com') ||
-    d.includes('prod.do.dsp.mp.microsoft.com') ||
-    d.includes('trafficmanager.net') ||
-    d.includes('events.data.microsoft.com') ||
-    d.includes('edgekey.net') ||
-    d.includes('edgesuite.net') ||
-    d.includes('delivery.mp.microsoft.com')
-  );
-};
+import { isUserFacingDomain } from '../../lib/domainFilter';
 
 export const ActivityView: React.FC = () => {
   const [domains, setDomains] = React.useState<DomainEvent[]>([]);
@@ -46,7 +32,7 @@ export const ActivityView: React.FC = () => {
     try {
       setIsLoading(true);
       const res = await api.getRecentDomains(categoryFilter);
-      const clean = (res?.domains || []).filter((d) => !isSystemNoiseDomain(d.domain));
+      const clean = (res?.domains || []).filter((d) => isUserFacingDomain(d.domain));
       setDomains(clean);
     } catch {
       // ignore
@@ -62,12 +48,12 @@ export const ActivityView: React.FC = () => {
   // Real-time DNS live telemetry listener
   React.useEffect(() => {
     const unsubscribe = addListener('dns_activity', (payload: any) => {
-      if (!payload?.event || isSystemNoiseDomain(payload.event.domain)) return;
+      if (!payload?.event || !isUserFacingDomain(payload.event.domain)) return;
       const newEvent: DomainEvent = payload.event;
       if (categoryFilter !== 'all' && newEvent.category !== categoryFilter) return;
       setDomains((prev) => {
         const filtered = prev.filter(
-          (d) => d.domain.toLowerCase() !== newEvent.domain.toLowerCase() && !isSystemNoiseDomain(d.domain)
+          (d) => d.domain.toLowerCase() !== newEvent.domain.toLowerCase() && isUserFacingDomain(d.domain)
         );
         return [newEvent, ...filtered.slice(0, 99)];
       });

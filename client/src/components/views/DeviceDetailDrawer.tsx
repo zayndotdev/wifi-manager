@@ -9,6 +9,7 @@ import { formatBytes, formatSpeed, formatDuration } from '../../lib/formatters';
 import { useDevices } from '../../context/DeviceContext';
 import { api } from '../../lib/api';
 import { DomainEvent } from '../../types/traffic';
+import { isUserFacingDomain } from '../../lib/domainFilter';
 import {
   Pause,
   Play,
@@ -46,7 +47,11 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
   React.useEffect(() => {
     if (!device) return;
     api.getRecentDomains('all').then((res) => {
-      setDeviceDomains(res.domains.filter((d) => d.deviceId === device.id).slice(0, 6));
+      setDeviceDomains(
+        (res.domains || [])
+          .filter((d) => isUserFacingDomain(d.domain) && d.deviceId === device.id)
+          .slice(0, 6)
+      );
     }).catch(() => {});
   }, [device?.id]);
 

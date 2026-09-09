@@ -498,26 +498,94 @@ class RealNetworkService {
   private ipToDomainMap: Map<string, string> = new Map();
 
   public isSystemNoiseDomain(dom: string): boolean {
-    const d = dom.toLowerCase();
-    return (
-      d.includes('mongodb.net') ||
-      d.includes('mongodb.com') ||
-      d.includes('compute.amazonaws.com') ||
-      d.includes('prod.do.dsp.mp.microsoft.com') ||
-      d.includes('trafficmanager.net') ||
-      d.includes('events.data.microsoft.com') ||
-      d.includes('edgekey.net') ||
-      d.includes('edgesuite.net') ||
-      d.includes('delivery.mp.microsoft.com') ||
-      d.endsWith('.local') ||
-      d.endsWith('.arpa') ||
+    const d = dom.toLowerCase().trim();
+    if (!d || d.length < 4) return true;
+
+    // Reject IP addresses & local network artifacts
+    if (
       d.startsWith('192.') ||
       d.startsWith('127.') ||
       d.startsWith('10.') ||
       d.startsWith('172.16.') ||
       d.startsWith('fe80:') ||
       d.includes('::') ||
-      d.length < 4
+      d.endsWith('.local') ||
+      d.endsWith('.arpa') ||
+      d.endsWith('.internal') ||
+      d.endsWith('.lan')
+    ) {
+      return true;
+    }
+
+    // Approach A: Filter out cloud infrastructure, CDNs, background daemons, and telemetry
+    return (
+      // Databases & Cloud Compute Backends
+      d.includes('mongodb.net') ||
+      d.includes('mongodb.com') ||
+      d.includes('compute.amazonaws.com') ||
+      d.includes('.amazonaws.com') ||
+      d.includes('.cloudfront.net') ||
+
+      // Azure / Microsoft Edge Routing & CDN Shards
+      d.includes('azurefd.net') ||
+      d.includes('azureedge.net') ||
+      d.includes('trafficmanager.net') ||
+      d.includes('cloudapp.azure.com') ||
+      d.includes('cloudapp.net') ||
+      d.includes('core.windows.net') ||
+      d.includes('msedge.net') ||
+      d.includes('office.net') ||
+      d.includes('cloud.microsoft') ||
+      d.includes('skype.com') ||
+
+      // Microsoft Background Telemetry, Delivery & Windows Update
+      d.includes('delivery.mp.microsoft.com') ||
+      d.includes('events.data.microsoft.com') ||
+      d.includes('prod.do.dsp.mp.microsoft.com') ||
+      d.includes('data.microsoft.com') ||
+      d.includes('windowsupdate.com') ||
+      d.includes('storequality.microsoft.com') ||
+      d.includes('exp-tas.com') ||
+      d.includes('iris.microsoft.com') ||
+      d.includes('cwsapp') ||
+      d.includes('update.microsoft.com') ||
+      d.includes('wdcp.microsoft.com') ||
+      d.includes('assets.msn.com') ||
+      d.includes('ecs.office.com') ||
+      d.includes('teams-mrc') ||
+      d.includes('svc.ha-teams') ||
+      d.includes('tmc-g2') ||
+
+      // Google Cloud Services, Internal Shards, IDE Unleash & APIs
+      d.includes('googleusercontent.com') ||
+      d.includes('googleapis.com') ||
+      d.includes('gvt1.com') ||
+      d.includes('1e100.net') ||
+      d.endsWith('.goog') ||
+      d.includes('.goog/') ||
+      d.includes('.pki.goog') ||
+      d.includes('pki-goog') ||
+
+      // Desktop Background Daemons & Speech Tools
+      d.includes('wisprflow.com') ||
+
+      // Error Reporting & Tracking Collectors
+      d.includes('sentry.io') ||
+      d.includes('bugsnag.com') ||
+      d.includes('crashlytics.com') ||
+      d.includes('segment.io') ||
+
+      // CDN Mesh & Certificate Revocation Infrastructure
+      d.includes('.akamaiedge.net') ||
+      d.includes('.edgekey.net') ||
+      d.includes('.edgesuite.net') ||
+      d.includes('.akadns.net') ||
+      d.includes('.akamai.net') ||
+      d.includes('.akamaized.net') ||
+      d.includes('fastly.net') ||
+      d.includes('gcdn.co') ||
+      d.includes('digicert.com') ||
+      d.includes('msidentity.com')
     );
   }
 

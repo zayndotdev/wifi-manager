@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { DomainLogModel, IDomainLog } from '../models/DomainLog.model.js';
 import { isConnectedToMongo } from '../config/database.js';
 
-const SYSTEM_NOISE_REGEX = /(mongodb\.net|mongodb\.com|compute\.amazonaws\.com|\.prod\.do\.dsp\.mp\.microsoft\.com|trafficmanager\.net|events\.data\.microsoft\.com|\.edgekey\.net|\.edgesuite\.net|delivery\.mp\.microsoft\.com)/i;
+const SYSTEM_NOISE_REGEX = /(mongodb\.(net|com)|compute\.amazonaws\.com|\.amazonaws\.com|\.cloudfront\.net|azurefd\.net|azureedge\.net|trafficmanager\.net|cloudapp\.azure\.com|cloudapp\.net|core\.windows\.net|msedge\.net|office\.net|cloud\.microsoft|skype\.com|prod\.do\.dsp\.mp\.microsoft\.com|events\.data\.microsoft\.com|delivery\.mp\.microsoft\.com|windowsupdate\.com|storequality\.microsoft\.com|data\.microsoft\.com|exp-tas\.com|iris\.microsoft\.com|cwsapp|update\.microsoft\.com|wdcp\.microsoft\.com|pki-goog|googleusercontent\.com|googleapis\.com|gvt1\.com|1e100\.net|\.goog$|\.goog\/|\.pki\.goog|wisprflow\.com|sentry\.io|bugsnag\.com|crashlytics\.com|segment\.io|\.akamaiedge\.net|\.edgekey\.net|\.edgesuite\.net|\.akadns\.net|\.akamai\.net|\.akamaized\.net|fastly\.net|gcdn\.co|digicert\.com|msidentity\.com|assets\.msn\.com|ecs\.office\.com|tm-\d+\.office\.com|svc\..*\.office\.com|\.local$|\.arpa$|\.internal$|\.lan$)/i;
 
 class TrafficService {
   private domainList: any[];
@@ -14,11 +14,25 @@ class TrafficService {
     this.loadFromMongo();
   }
 
+  public async purgeHistoricalNoise(): Promise<number> {
+    if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
+      try {
+        const res = await DomainLogModel.deleteMany({ domain: { $regex: SYSTEM_NOISE_REGEX } });
+        console.log(`[TrafficService] Purged ${res.deletedCount} historical noise domain logs from MongoDB Atlas.`);
+        return res.deletedCount || 0;
+      } catch (err: any) {
+        console.error('[TrafficService] Error purging historical noise:', err.message);
+        return 0;
+      }
+    }
+    return 0;
+  }
+
   private async loadFromMongo() {
     if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
       try {
         // Clean purge any historical background cloud infrastructure noise
-        await DomainLogModel.deleteMany({ domain: { $regex: SYSTEM_NOISE_REGEX } }).catch(() => {});
+        await this.purgeHistoricalNoise();
 
         const docs = await DomainLogModel.find({ domain: { $not: SYSTEM_NOISE_REGEX } })
           .sort({ timestamp: -1 })

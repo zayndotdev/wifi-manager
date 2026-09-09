@@ -10,6 +10,8 @@ import { formatBytes, formatSpeed } from '../../lib/formatters';
 import { useDevices } from '../../context/DeviceContext';
 import { api } from '../../lib/api';
 import { useToast } from '../ui/Toast';
+import { useWebSocket } from '../../context/WebSocketContext';
+import { isUserFacingDomain } from '../../lib/domainFilter';
 import {
   ArrowLeft,
   Pause,
@@ -82,11 +84,12 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
   const [isEditingName, setIsEditingName] = React.useState(false);
   const [nicknameInput, setNicknameInput] = React.useState('');
   const [copiedField, setCopiedField] = React.useState<string | null>(null);
+  const { addListener } = useWebSocket();
   const [deviceDomains, setDeviceDomains] = React.useState<DomainEvent[]>([]);
   const [isLoadingDomains, setIsLoadingDomains] = React.useState(false);
   const [activeSubTab, setActiveSubTab] = React.useState<'overview' | 'activity' | 'network' | 'rules'>('overview');
 
-  // Load device domains
+  // Load clean user domains (Approach A)
   const fetchDeviceDomains = React.useCallback(async () => {
     if (!device) return;
     try {
@@ -94,8 +97,9 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
       const res = await api.getRecentDomains('all');
       const filtered = (res?.domains || []).filter(
         (d) =>
-          d.deviceId === device.id ||
-          d.deviceNickname?.toLowerCase() === (device.nickname || device.hostname).toLowerCase()
+          isUserFacingDomain(d.domain) &&
+          (d.deviceId === device.id ||
+            d.deviceNickname?.toLowerCase() === (device.nickname || device.hostname).toLowerCase())
       );
       setDeviceDomains(filtered);
     } catch {
@@ -108,6 +112,27 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
   React.useEffect(() => {
     fetchDeviceDomains();
   }, [fetchDeviceDomains]);
+
+  // Live WebSocket listener for new real DNS user activity for this device
+  React.useEffect(() => {
+    if (!device) return;
+    const unsubscribe = addListener('dns_activity', (payload: any) => {
+      const event = payload?.event;
+      if (!event || !isUserFacingDomain(event.domain)) return;
+      if (
+        event.deviceId === device.id ||
+        event.deviceNickname?.toLowerCase() === (device.nickname || device.hostname).toLowerCase()
+      ) {
+        setDeviceDomains((prev) => {
+          const withoutCurrent = prev.filter((d) => d.domain.toLowerCase() !== event.domain.toLowerCase());
+          return [event, ...withoutCurrent].slice(0, 50);
+        });
+      }
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [device?.id, device?.nickname, device?.hostname, addListener]);
 
   React.useEffect(() => {
     if (device) {
