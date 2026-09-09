@@ -1,0 +1,204 @@
+:root {
+  --radius: 0.625rem;
+}
+
+/* 1. CLEAN SLATE (Default Light - Inspired by sale.theengine.dev) */
+:root,
+[data-theme="clean-slate"] {
+  --bg-app: #FAFAFA;
+  --bg-card: #FFFFFF;
+  --bg-card-subtle: #F4F4F5;
+  --bg-surface: #FFFFFF;
+  --bg-glass: rgba(255, 255, 255, 0.85);
+
+  --border-subtle: #E4E4E7;
+  --border-default: #D4D4D8;
+  --border-hover: #A1A1AA;
+  --border-active: #2563EB;
+
+  --text-primary: #09090B;
+  --text-secondary: #52525B;
+  --text-tertiary: #71717A;
+  --text-muted: #A1A1AA;
+  --text-invert: #FFFFFF;
+
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #F4F4F5;
+  --secondary-hover: #E4E4E7;
+  --secondary-foreground: #18181B;
+
+  --tertiary: #FAFAFA;
+  --tertiary-foreground: #52525B;
+
+  --accent: #3B82F6;
+  --accent-hover: #2563EB;
+  --accent-foreground: #FFFFFF;
+
+  --status-online: #10B981;
+  --status-warning: #F59E0B;
+  --status-blocked: #EF4444;
+  --status-throttled: #F97316;
+}
+
+/* 2. WARM NEUTRAL (Alabaster + Warm stone + Terracotta accent) */
+[data-theme="warm-neutral"] {
+  --bg-app: #F7F5F2;
+  --bg-card: #FFFFFF;
+  --bg-card-subtle: #F0EDE8;
+  --bg-surface: #FFFFFF;
+  --bg-glass: rgba(255, 255, 255, 0.88);
+
+  --border-subtle: #E6E1DA;
+  --border-default: #D8D2C9;
+  --border-hover: #A8A196;
+  --border-active: #EA580C;
+
+  --text-primary: #1C1917;
+  --text-secondary: #57534E;
+  --text-tertiary: #78716C;
+  --text-muted: #A8A29E;
+  --text-invert: #FFFFFF;
+
+  --primary: #EA580C;
+  --primary-hover: #C2410C;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #EFECE6;
+  --secondary-hover: #E4DFD6;
+  --secondary-foreground: #292524;
+
+  --tertiary: #F7F5F2;
+  --tertiary-foreground: #57534E;
+
+  --accent: #F97316;
+  --accent-hover: #EA580C;
+  --accent-foreground: #FFFFFF;
+
+  --status-online: #15803D;
+  --status-warning: #D97706;
+  --status-blocked: #DC2626;
+  --status-throttled: #EA580C;
+}
+
+/* 3. NORDIC SKY (Cool Ice + Frost Slate + Arctic Azure accent) */
+[data-theme="nordic-sky"] {
+  --bg-app: #F4F7FB;
+  --bg-card: #FFFFFF;
+  --bg-card-subtle: #E9EEF5;
+  --bg-surface: #FFFFFF;
+  --bg-glass: rgba(255, 255, 255, 0.88);
+
+  --border-subtle: #DFE5EC;
+  --border-default: #CBD5E1;
+  --border-hover: #94A3B8;
+  --border-active: #0284C7;
+
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-tertiary: #64748B;
+  --text-muted: #94A3B8;
+  --text-invert: #FFFFFF;
+
+  --primary: #0284C7;
+  --primary-hover: #0369A1;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #EBF1F7;
+  --secondary-hover: #DFE8F2;
+  --secondary-foreground: #0F172A;
+
+  --tertiary: #F4F7FB;
+  --tertiary-foreground: #475569;
+
+  --accent: #38BDF8;
+  --accent-hover: #0284C7;
+  --accent-foreground: #FFFFFF;
+
+  --status-online: #059669;
+  --status-warning: #D97706;
+  --status-blocked: #E11D48;
+  --status-throttled: #F59E0B;
+}
+
+/* 4. EMERALD MINIMAL (Sage Botanical + Forest Graphite + Mint accent) */
+[data-theme="emerald-minimal"] {
+  --bg-app: #F5F8F6;
+  --bg-card: #FFFFFF;
+  --bg-card-subtle: #EAF0EC;
+  --bg-surface: #FFFFFF;
+  --bg-glass: rgba(255, 255, 255, 0.88);
+
+  --border-subtle: #DFE7E1;
+  --border-default: #CBD6CE;
+  --border-hover: #91A395;
+  --border-active: #059669;
+
+  --text-primary: #0F291E;
+  --text-secondary: #3D5A4C;
+  --text-tertiary: #5E7A6D;
+  --text-muted: #8EABA0;
+  --text-invert: #FFFFFF;
+
+  --primary: #059669;
+  --primary-hover: #047857;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #ECF3EE;
+  --secondary-hover: #DFECE3;
+  --secondary-foreground: #0F291E;
+
+  --tertiary: #F5F8F6;
+  --tertiary-foreground: #3D5A4C;
+
+  --accent: #10B981;
+  --accent-hover: #059669;
+  --accent-foreground: #FFFFFF;
+
+  --status-online: #10B981;
+  --status-warning: #D97706;
+  --status-blocked: #DC2626;
+  --status-throttled: #D97706;
+}
+
+/* 5. ONYX CONTRAST (Sleek Dark Mode for low light environments) */
+[data-theme="onyx-contrast"] {
+  --bg-app: #09090B;
+  --bg-card: #121215;
+  --bg-card-subtle: #1C1C22;
+  --bg-surface: #141418;
+  --bg-glass: rgba(18, 18, 21, 0.85);
+
+  --border-subtle: #27272A;
+  --border-default: #3F3F46;
+  --border-hover: #71717A;
+  --border-active: #3B82F6;
+
+  --text-primary: #FAFAFA;
+  --text-secondary: #D4D4D8;
+  --text-tertiary: #A1A1AA;
+  --text-muted: #71717A;
+  --text-invert: #09090B;
+
+  --primary: #3B82F6;
+  --primary-hover: #60A5FA;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #1C1C22;
+  --secondary-hover: #27272A;
+  --secondary-foreground: #FAFAFA;
+
+  --tertiary: #141418;
+  --tertiary-foreground: #A1A1AA;
+
+  --accent: #60A5FA;
+  --accent-hover: #3B82F6;
+  --accent-foreground: #09090B;
+
+  --status-online: #34D399;
+  --status-warning: #FBBF24;
+  --status-blocked: #F87171;
+  --status-throttled: #FB923C;
+}
