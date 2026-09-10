@@ -1,6 +1,8 @@
 import { DeviceModel, IDevice } from '../models/Device.model.js';
 import { isConnectedToMongo } from '../config/database.js';
 import { realNetworkService } from './realNetwork.service.js';
+import { dnsGatewayService } from './dnsGateway.service.js';
+import { routerService } from './router.service.js';
 
 class DeviceService {
   private memoryStore: Map<string, any> = new Map();
@@ -162,11 +164,24 @@ class DeviceService {
       }
     }
     const dev = this.memoryStore.get(id);
+    let enforcement = 'dns_sinkhole_enforced';
     if (dev) {
       Object.assign(dev, patch);
       this.memoryStore.set(id, dev);
+
+      // 1. Enforce physical DNS Sinkhole on UDP Port 53
+      if (dev.ip) {
+        dnsGatewayService.pauseDevice(dev.ip);
+      }
+      // 2. Enforce Router Hardware Access Control / MAC Filter
+      if (dev.mac) {
+        const routerRes = await routerService.blockMac(dev.mac);
+        if (routerRes.method === 'router_hardware_filter') {
+          enforcement = 'router_hardware_filter';
+        }
+      }
     }
-    return { id, status: 'paused', pausedAt: new Date().toISOString() };
+    return { id, status: 'paused', pausedAt: new Date().toISOString(), enforcement };
   }
 
   public async resume(id: string): Promise<any> {
@@ -182,11 +197,21 @@ class DeviceService {
     if (dev) {
       Object.assign(dev, patch);
       this.memoryStore.set(id, dev);
+
+      // 1. Restore physical DNS access
+      if (dev.ip) {
+        dnsGatewayService.resumeDevice(dev.ip);
+      }
+      // 2. Remove Router Hardware Block
+      if (dev.mac) {
+        await routerService.unblockMac(dev.mac);
+      }
     }
     return { id, status: 'active', resumedAt: new Date().toISOString() };
   }
 
   public async kick(id: string): Promise<any> {
+    const dev = this.memoryStore.get(id);
     if (isConnectedToMongo) {
       try {
         await DeviceModel.deleteOne({ id });
@@ -194,8 +219,17 @@ class DeviceService {
         // fallback
       }
     }
-    const dev = this.memoryStore.get(id);
     this.memoryStore.delete(id);
+
+    // Physically kick device by forcing disassociation frame via router cycle & transient sinkhole
+    if (dev?.mac) {
+      await routerService.kickStation(dev.mac);
+    }
+    if (dev?.ip) {
+      dnsGatewayService.pauseDevice(dev.ip);
+      setTimeout(() => dnsGatewayService.resumeDevice(dev.ip), 30000);
+    }
+
     return { id, mac: dev?.mac, action: 'deauthenticated', timestamp: new Date().toISOString() };
   }
 
@@ -212,6 +246,9 @@ class DeviceService {
     if (dev) {
       Object.assign(dev, patch);
       this.memoryStore.set(id, dev);
+
+      if (dev.ip) dnsGatewayService.pauseDevice(dev.ip);
+      if (dev.mac) await routerService.blockMac(dev.mac);
     }
     return { id, status: 'blocked', notes, blockedAt: new Date().toISOString() };
   }
@@ -229,6 +266,9 @@ class DeviceService {
     if (dev) {
       Object.assign(dev, patch);
       this.memoryStore.set(id, dev);
+
+      if (dev.ip) dnsGatewayService.resumeDevice(dev.ip);
+      if (dev.mac) await routerService.unblockMac(dev.mac);
     }
     return { id, status: 'active', message: 'Device unblocked' };
   }

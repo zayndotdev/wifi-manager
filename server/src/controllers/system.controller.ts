@@ -64,3 +64,50 @@ export const getMeshNodes = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ error: err.message });
   }
 };
+
+export const getRouterConfig = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const config = await (await import('../services/router.service.js')).routerService.getConfig();
+    res.json(config);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const saveRouterConfig = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ip, username, password, enforcementMode } = req.body;
+    const config = await (await import('../services/router.service.js')).routerService.saveConfig({
+      ip,
+      username,
+      password,
+      enforcementMode,
+    });
+    res.json(config);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const testRouterConnection = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ip, username, password } = req.body;
+    const status = await (await import('../services/router.service.js')).routerService.testConnection(
+      ip,
+      username,
+      password
+    );
+    res.json(status);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const getDnsGatewayStats = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const stats = (await import('../services/dnsGateway.service.js')).dnsGatewayService.getStats();
+    res.json(stats);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};

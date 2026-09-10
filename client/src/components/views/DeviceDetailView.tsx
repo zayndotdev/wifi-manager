@@ -37,7 +37,9 @@ import {
   Server,
   Activity,
   Layers,
+  ShieldAlert,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 
 export interface DeviceDetailViewProps {
@@ -234,7 +236,7 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
             size="sm"
             className="gap-1.5 text-xs text-foreground-muted hover:text-foreground"
             onClick={() => {
-              const url = `${window.location.origin}/#/devices/${device.id}`;
+              const url = `${window.location.origin}/devices/${device.id}`;
               navigator.clipboard.writeText(url);
               toast({ type: 'info', title: 'Shareable URL Copied', description: url });
             }}
@@ -307,6 +309,32 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
         </Card>
       )}
 
+      {/* Paused Physical Enforcement Guidance Banner */}
+      {isPaused && (
+        <Card className="p-4 border-amber-500/30 bg-amber-500/10 shadow-subtle animate-fade-in">
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <div className="text-xs space-y-1">
+              <h4 className="font-semibold text-amber-700 dark:text-amber-300">
+                Internet Paused — Active Enforcement Status
+              </h4>
+              <p className="text-[11px] text-foreground-muted leading-relaxed">
+                Active DNS Sinkhole (Port 53 UDP) is currently blocking all domain resolution for <code>{device.ip}</code> on this host.
+              </p>
+              <p className="text-[11px] text-foreground-muted leading-relaxed">
+                <strong>To complete 100% physical cutoff on mobile devices:</strong> Either enter your ZTE router admin password in{' '}
+                <Link to="/settings" className="underline font-semibold text-primary hover:text-primary-hover">
+                  Settings → Router Hardware
+                </Link>{' '}
+                to block its MAC address directly at the Wi-Fi chip, or set your router's DHCP DNS (or phone's Wi-Fi DNS) to <code>192.168.1.17</code>.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Main Hero Header Card */}
       <Card className="p-6 bg-gradient-to-r from-card via-card to-secondary/30">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -350,7 +378,12 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
 
                 {/* Status Badges */}
                 {isPaused ? (
-                  <Badge variant="paused">Internet Paused</Badge>
+                  <>
+                    <Badge variant="paused">Internet Paused</Badge>
+                    <Badge variant="blocked" className="text-[10px] font-mono">
+                      Port 53 Sinkholed & Hardware Blocked
+                    </Badge>
+                  </>
                 ) : isBlocked ? (
                   <Badge variant="blocked">Access Blocked</Badge>
                 ) : isOffline ? (

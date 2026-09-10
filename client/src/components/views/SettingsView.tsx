@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { Input } from '../ui/Input';
 import { useTheme } from '../../context/ThemeContext';
 import { api } from '../../lib/api';
 import { MeshNode } from '../../types/system';
@@ -15,6 +16,12 @@ import {
   Download,
   Shield,
   Check,
+  Lock,
+  Wifi,
+  Server,
+  KeyRound,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -23,9 +30,114 @@ export const SettingsView: React.FC = () => {
   const [meshNodes, setMeshNodes] = React.useState<MeshNode[]>([]);
   const { toast } = useToast();
 
+  // Router Hardware Integration State
+  const [routerIp, setRouterIp] = React.useState('192.168.1.1');
+  const [routerUser, setRouterUser] = React.useState('admin');
+  const [routerPass, setRouterPass] = React.useState('');
+  const [enforcementMode, setEnforcementMode] = React.useState<'hybrid' | 'router_hardware' | 'dns_sinkhole'>('hybrid');
+  const [isTesting, setIsTesting] = React.useState(false);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [connectionStatus, setConnectionStatus] = React.useState<{
+    isReachable?: boolean;
+    isAuthenticated?: boolean;
+    lastError?: string;
+  } | null>(null);
+
+  // DNS Gateway Stats
+  const [dnsStats, setDnsStats] = React.useState<{
+    totalQueries: number;
+    blockedQueries: number;
+    allowedQueries: number;
+    activePausedIps: number;
+    uptimeSeconds: number;
+  }>({
+    totalQueries: 0,
+    blockedQueries: 0,
+    allowedQueries: 0,
+    activePausedIps: 0,
+    uptimeSeconds: 0,
+  });
+
   React.useEffect(() => {
     api.getMeshNodes().then(setMeshNodes).catch(() => {});
+    api
+      .getRouterConfig()
+      .then((cfg) => {
+        if (cfg) {
+          if (cfg.ip) setRouterIp(cfg.ip);
+          if (cfg.username) setRouterUser(cfg.username);
+          if (cfg.enforcementMode) setEnforcementMode(cfg.enforcementMode);
+        }
+      })
+      .catch(() => {});
+
+    api
+      .getDnsStats()
+      .then(setDnsStats)
+      .catch(() => {});
+
+    const interval = setInterval(() => {
+      api.getDnsStats().then(setDnsStats).catch(() => {});
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
+
+  const handleTestRouter = async () => {
+    setIsTesting(true);
+    try {
+      const res = await api.testRouterConnection({
+        ip: routerIp,
+        username: routerUser,
+        password: routerPass,
+      });
+      setConnectionStatus(res);
+      if (res.isAuthenticated) {
+        toast({
+          type: 'success',
+          title: 'Router Authenticated',
+          description: 'Hardware MAC filtering is fully active on ZTE TEWA-220G.',
+        });
+      } else if (res.isReachable) {
+        toast({
+          type: 'warning',
+          title: 'Router Reachable',
+          description: res.lastError || 'Credentials needed to access router hardware filter.',
+        });
+      } else {
+        toast({
+          type: 'error',
+          title: 'Router Unreachable',
+          description: res.lastError || 'Could not connect to router at specified IP.',
+        });
+      }
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Test Failed', description: err.message });
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleSaveRouter = async () => {
+    setIsSaving(true);
+    try {
+      await api.saveRouterConfig({
+        ip: routerIp,
+        username: routerUser,
+        password: routerPass,
+        enforcementMode,
+      });
+      toast({
+        type: 'success',
+        title: 'Settings Saved',
+        description: 'Enforcement configuration updated successfully.',
+      });
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Save Failed', description: err.message });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleExportBackup = () => {
     const backupData = {
@@ -33,6 +145,11 @@ export const SettingsView: React.FC = () => {
       exportedAt: new Date().toISOString(),
       network: 'Enterprise Wi-Fi Sentinel',
       meshNodes,
+      routerConfig: {
+        ip: routerIp,
+        model: 'ZTE TEWA-220G',
+        enforcementMode,
+      },
     };
     const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -45,7 +162,212 @@ export const SettingsView: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* 1. Theme Palette Customizer */}
+      {/* 1. Physical Enforcement & Router Hardware Gateway */}
+      <Card className="border-primary/30">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <CardTitle>Physical Network Enforcement & Router Hardware</CardTitle>
+                <Badge variant="online" className="gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  <span>Port 53 Active</span>
+                </Badge>
+              </div>
+              <p className="text-xs text-foreground-muted mt-0.5">
+                Configure direct hardware access and autonomous DNS sinkholing to physically pause, block, or kick devices on real Wi-Fi hardware.
+              </p>
+            </div>
+            <Badge variant="neutral" className="font-mono text-xs self-start sm:self-auto">
+              ZTE TEWA-220G
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Active DNS Sinkhole Gateway Status Bar */}
+          <div className="p-3.5 rounded-lg bg-secondary/50 border border-border grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div>
+              <span className="text-foreground-muted block text-[10px] uppercase font-semibold">
+                DNS Sinkhole Gateway
+              </span>
+              <span className="font-mono font-semibold text-foreground flex items-center gap-1.5 mt-0.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                0.0.0.0:53 Active
+              </span>
+            </div>
+            <div>
+              <span className="text-foreground-muted block text-[10px] uppercase font-semibold">
+                Paused Client IPs
+              </span>
+              <span className="font-mono font-semibold text-foreground mt-0.5 block">
+                {dnsStats.activePausedIps} under cut
+              </span>
+            </div>
+            <div>
+              <span className="text-foreground-muted block text-[10px] uppercase font-semibold">
+                Sinkholed Queries
+              </span>
+              <span className="font-mono font-semibold text-amber-500 mt-0.5 block">
+                {dnsStats.blockedQueries} blocked
+              </span>
+            </div>
+            <div>
+              <span className="text-foreground-muted block text-[10px] uppercase font-semibold">
+                Allowed Queries
+              </span>
+              <span className="font-mono font-semibold text-foreground mt-0.5 block">
+                {dnsStats.allowedQueries} resolved
+              </span>
+            </div>
+          </div>
+
+          {/* Router Form Fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-foreground-secondary block mb-1">
+                Router Management IP
+              </label>
+              <Input
+                value={routerIp}
+                onChange={(e) => setRouterIp(e.target.value)}
+                placeholder="192.168.1.1"
+                className="h-8 text-xs font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-foreground-secondary block mb-1">
+                Admin Username
+              </label>
+              <Input
+                value={routerUser}
+                onChange={(e) => setRouterUser(e.target.value)}
+                placeholder="admin"
+                className="h-8 text-xs font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-foreground-secondary block mb-1">
+                Router Web Password
+              </label>
+              <Input
+                type="password"
+                value={routerPass}
+                onChange={(e) => setRouterPass(e.target.value)}
+                placeholder="••••••••"
+                className="h-8 text-xs font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Enforcement Strategy Mode */}
+          <div>
+            <label className="text-[11px] font-semibold text-foreground-secondary block mb-1.5">
+              Enforcement Mode
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div
+                onClick={() => setEnforcementMode('hybrid')}
+                className={cn(
+                  'p-3 rounded-md border cursor-pointer transition-all',
+                  enforcementMode === 'hybrid'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border bg-card/60 hover:border-border-hover'
+                )}
+              >
+                <div className="font-semibold text-foreground flex items-center justify-between">
+                  <span>Hybrid Autonomous</span>
+                  {enforcementMode === 'hybrid' && <Check className="h-3.5 w-3.5 text-primary" />}
+                </div>
+                <p className="text-[11px] text-foreground-muted mt-1">
+                  Enforces via Port 53 DNS Sinkhole + Router Hardware Access Control.
+                </p>
+              </div>
+
+              <div
+                onClick={() => setEnforcementMode('dns_sinkhole')}
+                className={cn(
+                  'p-3 rounded-md border cursor-pointer transition-all',
+                  enforcementMode === 'dns_sinkhole'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border bg-card/60 hover:border-border-hover'
+                )}
+              >
+                <div className="font-semibold text-foreground flex items-center justify-between">
+                  <span>DNS Sinkhole Only</span>
+                  {enforcementMode === 'dns_sinkhole' && <Check className="h-3.5 w-3.5 text-primary" />}
+                </div>
+                <p className="text-[11px] text-foreground-muted mt-1">
+                  Zero-config. Cuts internet without needing router passwords.
+                </p>
+              </div>
+
+              <div
+                onClick={() => setEnforcementMode('router_hardware')}
+                className={cn(
+                  'p-3 rounded-md border cursor-pointer transition-all',
+                  enforcementMode === 'router_hardware'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-border bg-card/60 hover:border-border-hover'
+                )}
+              >
+                <div className="font-semibold text-foreground flex items-center justify-between">
+                  <span>Router Hardware Only</span>
+                  {enforcementMode === 'router_hardware' && <Check className="h-3.5 w-3.5 text-primary" />}
+                </div>
+                <p className="text-[11px] text-foreground-muted mt-1">
+                  Pushes MAC blocks directly to the ZTE router Wi-Fi chip.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center justify-between pt-2 border-t border-border">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTestRouter}
+                isLoading={isTesting}
+                className="gap-1.5"
+              >
+                <Wifi className="h-3.5 w-3.5" />
+                <span>Test Router Connection</span>
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSaveRouter}
+                isLoading={isSaving}
+                className="gap-1.5"
+              >
+                <Lock className="h-3.5 w-3.5" />
+                <span>Save Enforcement Settings</span>
+              </Button>
+            </div>
+
+            {connectionStatus && (
+              <div className="flex items-center gap-1.5 text-xs">
+                {connectionStatus.isAuthenticated ? (
+                  <Badge variant="online" className="gap-1">
+                    <Check className="h-3 w-3" />
+                    <span>Hardware Synced</span>
+                  </Badge>
+                ) : connectionStatus.isReachable ? (
+                  <Badge variant="warning" className="gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    <span>Router Reachable</span>
+                  </Badge>
+                ) : (
+                  <Badge variant="blocked">Unreachable</Badge>
+                )}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 2. Theme Palette Customizer */}
       <Card>
         <CardHeader>
           <div>
@@ -95,7 +417,7 @@ export const SettingsView: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* 2. Gateway Mesh Topology & Radios */}
+      {/* 3. Gateway Mesh Topology & Radios */}
       <Card>
         <CardHeader>
           <div>
@@ -150,7 +472,7 @@ export const SettingsView: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* 3. Maintenance & Backup */}
+      {/* 4. Maintenance & Backup */}
       <Card>
         <CardHeader>
           <CardTitle>Gateway Administration & Backup</CardTitle>
@@ -164,7 +486,13 @@ export const SettingsView: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => toast({ type: 'info', title: 'Firmware Up to Date', description: 'v2.4.1 is the latest stable release' })}
+              onClick={() =>
+                toast({
+                  type: 'info',
+                  title: 'Firmware Up to Date',
+                  description: 'v2.4.1 is the latest stable release',
+                })
+              }
               className="gap-1.5"
             >
               <Shield className="h-3.5 w-3.5" />

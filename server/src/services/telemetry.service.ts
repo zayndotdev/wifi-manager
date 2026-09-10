@@ -100,8 +100,8 @@ class TelemetryService {
       }
 
       const lastLogged = this.lastDomainLoggedTime.get(domain) || 0;
-      // Allow re-logging active domains every 12 seconds so ongoing browsing streams live
-      if (now - lastLogged < 12000) {
+      // Do not spam repetitive logs for lingering cache entries; refresh active sessions at a calm 120s cadence
+      if (lastLogged > 0 && now - lastLogged < 120000) {
         continue;
       }
 
@@ -195,7 +195,7 @@ class TelemetryService {
         timestamp: new Date(),
         status: 'allowed',
         queryCountToday: queryCount,
-        bytesTransferred: Math.floor(12000 + Math.random() * 350000),
+        bytesTransferred: 0,
       };
 
       await trafficService.addLiveEvent(event);

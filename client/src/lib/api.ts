@@ -116,4 +116,18 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ isRead: true }),
     }),
+
+  // Router Gateway Hardware Integration
+  getRouterConfig: () => request<any>('/system/router'),
+  saveRouterConfig: (data: any) =>
+    request<any>('/system/router', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  testRouterConnection: (data: any) =>
+    request<any>('/system/router/test', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getDnsStats: () => request<any>('/system/dns/stats'),
 };

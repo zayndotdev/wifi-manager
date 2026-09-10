@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
-import { exec, execSync } from 'child_process';
+import { exec, execSync, execFileSync } from 'child_process';
+import dns from 'dns';
 import dgram from 'dgram';
 import os from 'os';
 import { promisify } from 'util';
@@ -606,6 +607,28 @@ class RealNetworkService {
   }
 
   private ipToDomainMap: Map<string, string> = new Map();
+  private pendingReverseLookups = new Set<string>();
+
+  private resolveIpReverseDns(ip: string) {
+    if (this.ipToDomainMap.has(ip) || this.pendingReverseLookups.has(ip)) return;
+    if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('127.') || ip.startsWith('172.16.')) return;
+
+    this.pendingReverseLookups.add(ip);
+    dns.reverse(ip, (err, hostnames) => {
+      this.pendingReverseLookups.delete(ip);
+      if (!err && hostnames && hostnames.length > 0) {
+        const host = hostnames[0].toLowerCase().trim();
+        const parts = host.split('.');
+        let domain = host;
+        if (parts.length >= 2) {
+          domain = parts.slice(-2).join('.');
+        }
+        if (domain && !this.isSystemNoiseDomain(domain)) {
+          this.ipToDomainMap.set(ip, domain);
+        }
+      }
+    });
+  }
 
   public isSystemNoiseDomain(dom: string): boolean {
     const d = dom.toLowerCase().trim();
@@ -648,11 +671,13 @@ class RealNetworkService {
       d.includes('cloud.microsoft') ||
       d.includes('skype.com') ||
 
-      // Microsoft Background Telemetry, Delivery & Windows Update
+      // Microsoft Background Telemetry, Delivery, Store & Identity
       d.includes('delivery.mp.microsoft.com') ||
+      d.includes('delivery.microsoft.com') ||
       d.includes('events.data.microsoft.com') ||
       d.includes('prod.do.dsp.mp.microsoft.com') ||
       d.includes('data.microsoft.com') ||
+      d.includes('trafficshaping') ||
       d.includes('windowsupdate.com') ||
       d.includes('storequality.microsoft.com') ||
       d.includes('exp-tas.com') ||
@@ -660,24 +685,57 @@ class RealNetworkService {
       d.includes('cwsapp') ||
       d.includes('update.microsoft.com') ||
       d.includes('wdcp.microsoft.com') ||
+      d.includes('displaycatalog') ||
+      d.includes('bigcatalog') ||
+      d.includes('.commerce.microsoft.com') ||
+      d.includes('api.cdp.microsoft.com') ||
+      d.includes('storeedge') ||
+      d.includes('oneocsp.microsoft.com') ||
+      d.includes('teams.microsoft.com') ||
+      d.includes('teams.office.com') ||
+      d.includes('outlook.office365.com') ||
+      d.includes('oneclient.sfx.ms') ||
+      d.includes('login.live.com') ||
+      d.includes('identity.live.com') ||
+      d.includes('g.live.com') ||
+      d.includes('.live.com') ||
+      d.includes('login.microsoftonline.com') ||
       d.includes('assets.msn.com') ||
+      d.includes('.msn.com') ||
+      d.includes('smartscreen') ||
+      d.includes('wns.windows.com') ||
+      d.includes('time.windows.com') ||
+      d.includes('notify.windows.com') ||
+      d.includes('msftncsi.com') ||
+      d.includes('msftconnecttest.com') ||
       d.includes('ecs.office.com') ||
       d.includes('teams-mrc') ||
       d.includes('svc.ha-teams') ||
       d.includes('tmc-g2') ||
 
-      // Google Cloud Services, Internal Shards, IDE Unleash & APIs
+      // Google Cloud Services, Internal Shards, IDE Unleash & Background APIs
       d.includes('googleusercontent.com') ||
       d.includes('googleapis.com') ||
+      d.includes('gstatic.com') ||
       d.includes('gvt1.com') ||
+      d.includes('gvt2.com') ||
       d.includes('1e100.net') ||
       d.endsWith('.goog') ||
       d.includes('.goog/') ||
       d.includes('.pki.goog') ||
       d.includes('pki-goog') ||
+      d.includes('cloudcode-pa') ||
 
-      // Desktop Background Daemons & Speech Tools
-      d.includes('wisprflow.com') ||
+      // WhatsApp Background Media CDN
+      d.includes('cdn.whatsapp.net') ||
+      d.includes('.whatsapp.net') ||
+
+      // Desktop Background Daemons, Package Managers & Developer Utilities
+      d.includes('wisprflow') ||
+      d.includes('ip-api.com') ||
+      d.includes('registry.npmjs.org') ||
+      d.includes('schemastore') ||
+      d.includes('freedownloadmanager.org') ||
 
       // Error Reporting & Tracking Collectors
       d.includes('sentry.io') ||
@@ -703,35 +761,61 @@ class RealNetworkService {
   public getRealDnsCache(): string[] {
     const domains = new Set<string>();
 
-    // Step A: Parse native Windows DNS resolver cache (ipconfig /displaydns)
+    // Step A: Parse native Windows DNS resolver cache using fast PowerShell Get-DnsClientCache
     try {
-      const output = execSync('ipconfig /displaydns', { encoding: 'utf-8' });
-      const lines = output.split(/\r?\n/);
-      let currentDomain = '';
-
-      for (const line of lines) {
-        const m = line.match(/Record Name[\s.]+:\s*([^\r\n]+)/i);
-        if (m && m[1]) {
-          const dom = m[1].trim().toLowerCase();
+      const output = execFileSync(
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'Get-DnsClientCache | Select-Object -Property Entry, Data | ConvertTo-Json -Compress'],
+        { encoding: 'utf-8', timeout: 3000 }
+      );
+      if (output && output.trim()) {
+        const raw = JSON.parse(output.trim());
+        const entries = Array.isArray(raw) ? raw : [raw];
+        for (const item of entries) {
+          if (!item || !item.Entry) continue;
+          const dom = String(item.Entry).toLowerCase().trim();
           if (dom && !this.isSystemNoiseDomain(dom)) {
-            currentDomain = dom;
             domains.add(dom);
+            if (item.Data && typeof item.Data === 'string') {
+              const ip = item.Data.trim();
+              if (ip && !ip.includes(':')) {
+                this.ipToDomainMap.set(ip, dom);
+              }
+            }
           }
-        }
-
-        const ipMatch = line.match(/A \(Host\) Record[\s.]+:\s*([0-9.]+)/i);
-        if (ipMatch && ipMatch[1] && currentDomain) {
-          this.ipToDomainMap.set(ipMatch[1].trim(), currentDomain);
         }
       }
     } catch {
-      // Ignore DNS cache errors
+      // Fallback: Try ipconfig /displaydns if powershell execution fails
+      try {
+        const output = execSync('ipconfig /displaydns', { encoding: 'utf-8', timeout: 2000 });
+        const lines = output.split(/\r?\n/);
+        let currentDomain = '';
+
+        for (const line of lines) {
+          const m = line.match(/Record Name[\s.]+:\s*([^\r\n]+)/i);
+          if (m && m[1]) {
+            const dom = m[1].trim().toLowerCase();
+            if (dom && !this.isSystemNoiseDomain(dom)) {
+              currentDomain = dom;
+              domains.add(dom);
+            }
+          }
+
+          const ipMatch = line.match(/A \(Host\) Record[\s.]+:\s*([0-9.]+)/i);
+          if (ipMatch && ipMatch[1] && currentDomain) {
+            this.ipToDomainMap.set(ipMatch[1].trim(), currentDomain);
+          }
+        }
+      } catch {
+        // Ignore fallback errors
+      }
     }
 
     // Step B: Inspect active established outbound TCP connections (netstat -n -p tcp)
-    // Detects live browser sessions (Chrome, Edge, Firefox) including DNS-over-HTTPS (DoH) traffic
+    // Detects active browser sessions when remote IP matches a mapped user domain
     try {
-      const netstatOutput = execSync('netstat -n -p tcp', { encoding: 'utf-8' });
+      const netstatOutput = execSync('netstat -n -p tcp', { encoding: 'utf-8', timeout: 2000 });
       const lines = netstatOutput.split(/\r?\n/);
 
       for (const line of lines) {
@@ -747,35 +831,8 @@ class RealNetworkService {
               domains.add(dom);
             }
           } else {
-            // Check well-known major provider subnets (Cloudflare/ChatGPT, Google, GitHub, Microsoft)
-            if (
-              remoteIp.startsWith('172.64.') ||
-              remoteIp.startsWith('104.18.') ||
-              remoteIp.startsWith('104.19.') ||
-              remoteIp.startsWith('104.20.') ||
-              remoteIp.startsWith('104.21.')
-            ) {
-              domains.add('chatgpt.com');
-              this.ipToDomainMap.set(remoteIp, 'chatgpt.com');
-            } else if (
-              remoteIp.startsWith('142.250.') ||
-              remoteIp.startsWith('172.217.') ||
-              remoteIp.startsWith('192.178.') ||
-              remoteIp.startsWith('216.58.')
-            ) {
-              domains.add('google.com');
-              this.ipToDomainMap.set(remoteIp, 'google.com');
-            } else if (remoteIp.startsWith('140.82.')) {
-              domains.add('github.com');
-              this.ipToDomainMap.set(remoteIp, 'github.com');
-            } else if (
-              remoteIp.startsWith('20.') ||
-              remoteIp.startsWith('52.110.') ||
-              remoteIp.startsWith('52.112.')
-            ) {
-              domains.add('microsoft.com');
-              this.ipToDomainMap.set(remoteIp, 'microsoft.com');
-            }
+            // Asynchronously resolve active socket IP via reverse PTR
+            this.resolveIpReverseDns(remoteIp);
           }
         }
       }

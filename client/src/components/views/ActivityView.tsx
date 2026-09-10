@@ -175,7 +175,8 @@ export const ActivityView: React.FC = () => {
                 <th className="p-3 font-semibold">Domain / Host</th>
                 <th className="p-3 font-semibold">Category</th>
                 <th className="p-3 font-semibold">Requesting Client</th>
-                <th className="p-3 font-semibold">Time</th>
+                <th className="p-3 font-semibold">Queries</th>
+                <th className="p-3 font-semibold">Last Active</th>
                 <th className="p-3 font-semibold">Gateway Action</th>
                 <th className="p-3 font-semibold text-right">Block Control</th>
               </tr>
@@ -183,7 +184,7 @@ export const ActivityView: React.FC = () => {
             <tbody className="divide-y divide-border">
               {filteredDomains.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-foreground-muted">
+                  <td colSpan={7} className="p-8 text-center text-foreground-muted">
                     No domain events logged matching your criteria.
                   </td>
                 </tr>
@@ -194,7 +195,7 @@ export const ActivityView: React.FC = () => {
                     <tr key={item.id} className="hover:bg-secondary/30 transition-colors">
                       <td className="p-3 font-medium text-foreground">
                         <div className="flex items-center gap-2">
-                          <Globe className="h-3.5 w-3.5 text-foreground-muted" />
+                          <Globe className="h-3.5 w-3.5 text-foreground-muted shrink-0" />
                           <span className="font-mono text-xs">{item.domain}</span>
                         </div>
                       </td>
@@ -202,6 +203,11 @@ export const ActivityView: React.FC = () => {
                         <Badge variant="neutral">{item.category}</Badge>
                       </td>
                       <td className="p-3 text-foreground-secondary">{item.deviceNickname}</td>
+                      <td className="p-3 text-foreground-secondary font-mono">
+                        <span className="bg-secondary/70 px-2 py-0.5 rounded text-[11px] font-semibold text-foreground">
+                          {item.queryCountToday || 1}
+                        </span>
+                      </td>
                       <td className="p-3 text-foreground-muted tabular-nums">
                         {new Date(item.timestamp).toLocaleTimeString([], {
                           hour: '2-digit',

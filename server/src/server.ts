@@ -4,6 +4,7 @@ import { ENV } from './config/env.js';
 import { connectDatabase } from './config/database.js';
 import { telemetryBroadcaster } from './websocket/telemetryServer.js';
 import { telemetryService } from './services/telemetry.service.js';
+import { dnsGatewayService } from './services/dnsGateway.service.js';
 
 async function bootstrap() {
   console.log('====================================================');
@@ -13,17 +14,20 @@ async function bootstrap() {
   // 1. Connect to Database (Mongoose or fallback embedded)
   await connectDatabase();
 
-  // 2. Create Express app and HTTP server
+  // 2. Start Active UDP DNS Gateway & Sinkhole Engine (Port 53)
+  await dnsGatewayService.start(53);
+
+  // 3. Create Express app and HTTP server
   const app = createApp();
   const server = http.createServer(app);
 
-  // 3. Initialize WebSocket Telemetry Gateway
+  // 4. Initialize WebSocket Telemetry Gateway
   telemetryBroadcaster.initialize(server);
 
-  // 4. Start 1-second Telemetry Loop
+  // 5. Start 1-second Telemetry Loop
   telemetryService.start();
 
-  // 5. Start listening
+  // 6. Start listening
   server.listen(ENV.PORT, ENV.HOST, () => {
     console.log(`[Server] REST API listening on http://${ENV.HOST}:${ENV.PORT}`);
     console.log(`[Server] WebSockets listening on ws://${ENV.HOST}:${ENV.PORT}/ws/telemetry`);
@@ -33,6 +37,7 @@ async function bootstrap() {
   // Graceful shutdown
   const shutdown = () => {
     console.log('\n[Server] Shutting down gracefully...');
+    dnsGatewayService.stop();
     telemetryService.stop();
     telemetryBroadcaster.close();
     server.close(() => {

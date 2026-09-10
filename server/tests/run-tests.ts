@@ -236,6 +236,27 @@ async function runAllTests() {
     return res.status === 200 && spec.openapi === '3.0.3' && spec.info.title.includes('Wi-Fi Sentinel');
   });
 
+  // TST-022: Physical Router Hardware Config API
+  await test('TST-022: Router Hardware Config Telemetry (/api/system/router)', async () => {
+    const res = await fetch(`${baseUrl}/api/system/router`);
+    const data = await res.json();
+    return res.status === 200 && data.ip === '192.168.1.1' && data.model.includes('ZTE');
+  });
+
+  // TST-023: Port 53 DNS Gateway Live Stats
+  await test('TST-023: Port 53 DNS Gateway Live Stats (/api/system/dns/stats)', async () => {
+    const res = await fetch(`${baseUrl}/api/system/dns/stats`);
+    const data = await res.json();
+    return res.status === 200 && typeof data.totalQueries === 'number' && typeof data.activePausedIps === 'number';
+  });
+
+  // TST-024: Router Connection Test Endpoint
+  await test('TST-024: Router Hardware Connection Probe (/api/system/router/test)', async () => {
+    const res = await fetch(`${baseUrl}/api/system/router/test`, { method: 'POST' });
+    const data = await res.json();
+    return res.status === 200 && typeof data.isReachable === 'boolean' && data.isReachable === true;
+  });
+
   server.close();
 
   console.log('\n======================================================');
