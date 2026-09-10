@@ -47,11 +47,12 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const prevMap = new Map(prev.map((d) => [d.id, d]));
         return data.map((d) => {
           const p = prevMap.get(d.id);
+          const isOff = d.status === 'offline';
           return {
             ...d,
             todayBytesTotal: Math.max(d.todayBytesTotal || 0, p?.todayBytesTotal || 0),
-            currentDownloadBps: p?.currentDownloadBps ?? d.currentDownloadBps,
-            currentUploadBps: p?.currentUploadBps ?? d.currentUploadBps,
+            currentDownloadBps: isOff ? 0 : (p?.currentDownloadBps ?? d.currentDownloadBps),
+            currentUploadBps: isOff ? 0 : (p?.currentUploadBps ?? d.currentUploadBps),
           };
         });
       });
@@ -92,8 +93,11 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const prevMap = new Map(prev.map((d) => [d.id, d]));
           return data.devices.map((d: Device) => {
             const p = prevMap.get(d.id);
+            const isOff = d.status === 'offline';
             return {
               ...d,
+              currentDownloadBps: isOff ? 0 : (d.currentDownloadBps || 0),
+              currentUploadBps: isOff ? 0 : (d.currentUploadBps || 0),
               todayBytesTotal: Math.max(d.todayBytesTotal || 0, p?.todayBytesTotal || 0),
             };
           });
@@ -108,6 +112,13 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!latestTick?.deviceSpeeds) return;
     setDevices((prev) =>
       prev.map((dev) => {
+        if (dev.status === 'offline') {
+          return {
+            ...dev,
+            currentDownloadBps: 0,
+            currentUploadBps: 0,
+          };
+        }
         const speed = latestTick.deviceSpeeds[dev.id];
         if (speed) {
           const delta = (speed.downBps || 0) + (speed.upBps || 0);
@@ -124,7 +135,15 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Also sync selectedDevice if open
     setSelectedDevice((prev) => {
-      if (!prev || !latestTick.deviceSpeeds[prev.id]) return prev;
+      if (!prev) return prev;
+      if (prev.status === 'offline') {
+        return {
+          ...prev,
+          currentDownloadBps: 0,
+          currentUploadBps: 0,
+        };
+      }
+      if (!latestTick.deviceSpeeds[prev.id]) return prev;
       const speed = latestTick.deviceSpeeds[prev.id];
       const delta = (speed.downBps || 0) + (speed.upBps || 0);
       return {

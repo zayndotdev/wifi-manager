@@ -9,7 +9,7 @@ export type DeviceCategory =
   | 'printer'
   | 'unknown';
 
-export type DeviceStatus = 'active' | 'idle' | 'paused' | 'blocked' | 'throttled';
+export type DeviceStatus = 'active' | 'idle' | 'offline' | 'paused' | 'blocked' | 'throttled';
 
 export interface Device {
   id: string;
@@ -22,6 +22,9 @@ export interface Device {
   category: DeviceCategory;
   status: DeviceStatus;
   signalDbm: number;
+  latencyMs?: number;
+  estimatedDistanceMeters?: number;
+  proximityTier?: 'immediate' | 'adjacent' | 'far' | 'unknown';
   meshNodeId: string;
   meshNodeName: string;
   band: '2.4GHz' | '5GHz' | '6GHz';

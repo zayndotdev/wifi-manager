@@ -23,6 +23,7 @@ import {
   Clock,
   Radio,
   Wifi,
+  WifiOff,
   Globe,
   HardDrive,
   ArrowDown,
@@ -163,6 +164,7 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
 
   const isPaused = device.status === 'paused';
   const isBlocked = device.status === 'blocked';
+  const isOffline = device.status === 'offline';
 
   const copyToClipboard = (text: string, fieldName: string) => {
     navigator.clipboard.writeText(text);
@@ -182,12 +184,15 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
     }
   };
 
-  const proximityLabel =
-    device.signalDbm >= -50
-      ? 'Immediate Room (< 3m)'
-      : device.signalDbm >= -68
-      ? 'Adjacent Room (3 - 8m)'
-      : 'Edge of Coverage (> 8m)';
+  const proximityLabel = isOffline
+    ? 'Offline / Disconnected'
+    : device.estimatedDistanceMeters != null
+    ? `~${device.estimatedDistanceMeters}m (${device.proximityTier === 'immediate' ? 'Immediate Room' : device.proximityTier === 'adjacent' ? 'Adjacent Room' : 'Far Area'})`
+    : device.signalDbm >= -50
+    ? 'Immediate Room (< 3m)'
+    : device.signalDbm >= -68
+    ? 'Adjacent Room (3 - 8m)'
+    : 'Edge of Coverage (> 8m)';
 
   const categories: DeviceCategory[] = [
     'phone',
@@ -240,16 +245,18 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
           <Button
             variant={isPaused ? 'primary' : 'secondary'}
             size="sm"
+            disabled={isOffline}
             className="flex-1 sm:flex-none gap-1.5"
             onClick={() => (isPaused ? resumeDevice(device.id) : pauseDevice(device.id))}
           >
             {isPaused ? <Play className="h-3.5 w-3.5 fill-current" /> : <Pause className="h-3.5 w-3.5" />}
-            <span>{isPaused ? 'Resume Internet' : 'Pause Internet'}</span>
+            <span>{isPaused ? 'Resume Internet' : isOffline ? 'Device Offline' : 'Pause Internet'}</span>
           </Button>
 
           <Button
             variant="outline"
             size="sm"
+            disabled={isOffline}
             className="flex-1 sm:flex-none gap-1.5"
             onClick={() => onOpenThrottleModal(device)}
           >
@@ -279,6 +286,26 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* Offline Alert Banner */}
+      {isOffline && (
+        <Card className="p-4 border-slate-500/30 bg-slate-500/10 shadow-subtle">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-slate-500/20 text-slate-400 flex items-center justify-center shrink-0">
+              <WifiOff className="h-5 w-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                Device is currently disconnected / offline
+              </h4>
+              <p className="text-[11px] text-foreground-muted mt-0.5">
+                Local ICMP ping reachability probes did not receive a response from {device.ip}.
+                {device.lastSeenAt ? ` Device was last detected on ${new Date(device.lastSeenAt).toLocaleString()}.` : ''}
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Main Hero Header Card */}
       <Card className="p-6 bg-gradient-to-r from-card via-card to-secondary/30">
@@ -322,9 +349,15 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
                 )}
 
                 {/* Status Badges */}
-                <Badge variant={isPaused ? 'paused' : isBlocked ? 'blocked' : 'online'}>
-                  {isPaused ? 'Internet Paused' : isBlocked ? 'Access Blocked' : 'Online & Active'}
-                </Badge>
+                {isPaused ? (
+                  <Badge variant="paused">Internet Paused</Badge>
+                ) : isBlocked ? (
+                  <Badge variant="blocked">Access Blocked</Badge>
+                ) : isOffline ? (
+                  <Badge variant="offline" dot>Offline / Unreachable</Badge>
+                ) : (
+                  <Badge variant="online" dot>Online & Active</Badge>
+                )}
                 {device.isThrottled && <Badge variant="throttled">Bandwidth Throttled</Badge>}
                 {device.isRandomizedMac ? (
                   <Badge variant="neutral">Private Randomized MAC</Badge>
@@ -385,9 +418,9 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
           </div>
           <div className="mt-2">
             <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-              {formatSpeed(device.currentDownloadBps)}
+              {isOffline ? '0 B/s' : formatSpeed(device.currentDownloadBps)}
             </div>
-            <p className="text-[11px] text-foreground-muted mt-0.5">Live incoming payload</p>
+            <p className="text-[11px] text-foreground-muted mt-0.5">{isOffline ? 'Offline / idle' : 'Live incoming payload'}</p>
           </div>
         </Card>
 
@@ -400,9 +433,9 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
           </div>
           <div className="mt-2">
             <div className="text-2xl font-bold font-mono text-primary">
-              {formatSpeed(device.currentUploadBps)}
+              {isOffline ? '0 B/s' : formatSpeed(device.currentUploadBps)}
             </div>
-            <p className="text-[11px] text-foreground-muted mt-0.5">Live outbound traffic</p>
+            <p className="text-[11px] text-foreground-muted mt-0.5">{isOffline ? 'Offline / idle' : 'Live outbound traffic'}</p>
           </div>
         </Card>
 
@@ -431,9 +464,9 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
           <div className="mt-2">
             <div className="flex items-center gap-2">
               <span className="text-2xl font-bold font-mono text-foreground">
-                {device.signalDbm} dBm
+                {isOffline ? 'Offline' : `${device.signalDbm} dBm`}
               </span>
-              <RssiIndicator dbm={device.signalDbm} showDbmText={false} />
+              {!isOffline && <RssiIndicator dbm={device.signalDbm} showDbmText={false} />}
             </div>
             <p className="text-[11px] text-foreground-muted mt-0.5">{proximityLabel}</p>
           </div>
@@ -528,15 +561,40 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
                   <tr>
                     <td className="py-2.5 text-foreground-secondary">Signal Attenuation (RSSI)</td>
                     <td className="py-2.5 text-right font-mono text-foreground">
-                      <div className="flex items-center justify-end gap-2">
-                        <span>{device.signalDbm} dBm</span>
-                        <RssiIndicator dbm={device.signalDbm} showDbmText={false} />
-                      </div>
+                      {isOffline ? (
+                        <span className="text-foreground-muted">No carrier / Offline</span>
+                      ) : (
+                        <div className="flex items-center justify-end gap-2">
+                          <span>{device.signalDbm} dBm</span>
+                          <RssiIndicator dbm={device.signalDbm} showDbmText={false} />
+                        </div>
+                      )}
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 text-foreground-secondary">Estimated Distance</td>
-                    <td className="py-2.5 text-right font-medium text-foreground">{proximityLabel}</td>
+                    <td className="py-2.5 text-foreground-secondary">ICMP Ping Round-Trip (RTT)</td>
+                    <td className="py-2.5 text-right font-mono font-medium text-foreground">
+                      {isOffline ? (
+                        <span className="text-foreground-muted">Request Timed Out (Offline)</span>
+                      ) : device.latencyMs != null ? (
+                        <span className="text-emerald-600 dark:text-emerald-400">{device.latencyMs} ms</span>
+                      ) : (
+                        <span className="text-foreground-muted">Measuring...</span>
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 text-foreground-secondary">Estimated Distance (Physics Model)</td>
+                    <td className="py-2.5 text-right font-medium text-foreground">
+                      {isOffline ? (
+                        <span className="text-foreground-muted">Offline</span>
+                      ) : (
+                        <span>
+                          {device.estimatedDistanceMeters != null ? `~${device.estimatedDistanceMeters} meters` : 'Local Host'}
+                          {device.proximityTier ? ` (${device.proximityTier === 'immediate' ? 'Immediate Room' : device.proximityTier === 'adjacent' ? 'Adjacent Room' : 'Far Area'})` : ''}
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 </tbody>
               </table>

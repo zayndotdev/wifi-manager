@@ -21,6 +21,8 @@ const badgeVariants = cva(
           'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
         throttled:
           'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20',
+        offline:
+          'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20',
       },
     },
     defaultVariants: {
@@ -48,6 +50,7 @@ export const Badge: React.FC<BadgeProps> = ({
         <span
           className={cn('h-1.5 w-1.5 rounded-full', {
             'bg-emerald-500': variant === 'online',
+            'bg-slate-400 dark:bg-slate-500': variant === 'offline',
             'bg-rose-500': variant === 'paused' || variant === 'blocked',
             'bg-amber-500': variant === 'warning',
             'bg-orange-500': variant === 'throttled',

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Wifi, ArrowDown, ArrowUp, Pause, Play, Bell, Shield } from 'lucide-react';
 import { useWebSocket } from '../../context/WebSocketContext';
 import { useDevices } from '../../context/DeviceContext';
@@ -11,18 +12,15 @@ import { Badge } from '../ui/Badge';
 import { api } from '../../lib/api';
 import { SecurityAlert } from '../../types/system';
 
-export interface TopNavbarProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
-}
-
-export const TopNavbar: React.FC<TopNavbarProps> = ({ activeTab, setActiveTab }) => {
+export const TopNavbar: React.FC = () => {
+  const navigate = useNavigate();
   const { isConnected, latestTick } = useWebSocket();
   const { devices, pauseAllDevices, resumeAllDevices } = useDevices();
   const [alerts, setAlerts] = React.useState<SecurityAlert[]>([]);
   const [isAlertsOpen, setIsAlertsOpen] = React.useState(false);
 
   const activeCount = devices.filter((d) => d.status === 'active').length;
+  const offlineCount = devices.filter((d) => d.status === 'offline').length;
   const pausedCount = devices.filter((d) => d.status === 'paused').length;
   const totalCount = devices.length;
   const isAnyPaused = pausedCount > 0;
@@ -52,7 +50,13 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ activeTab, setActiveTab })
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
         {/* Left: Brand + Network Status */}
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('overview')}>
+          <div
+            className="flex items-center gap-2 cursor-pointer select-none"
+            onClick={() => navigate('/')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && navigate('/')}
+          >
             <div className="h-7 w-7 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-subtle">
               <Wifi className="h-4 w-4" />
             </div>
@@ -101,15 +105,36 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ activeTab, setActiveTab })
 
         {/* Right: Actions, Toggles, Alert Bell, Theme Picker */}
         <div className="flex items-center gap-2">
-          {/* Active Client Count Pill */}
-          <div
-            onClick={() => setActiveTab('devices')}
-            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary hover:bg-secondary-hover border border-border text-xs font-medium text-foreground cursor-pointer transition-colors"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            <span>{activeCount} Active</span>
-            <span className="text-foreground-muted">/ {totalCount}</span>
-          </div>
+          {/* Active vs Offline Count Pill */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                onClick={() => navigate('/devices')}
+                className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-md bg-secondary hover:bg-secondary-hover border border-border text-xs font-medium text-foreground cursor-pointer transition-colors select-none"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && navigate('/devices')}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  <span>{activeCount} Active</span>
+                </div>
+                {offlineCount > 0 && (
+                  <>
+                    <span className="text-border">|</span>
+                    <div className="flex items-center gap-1 text-foreground-muted">
+                      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                      <span>{offlineCount} Offline</span>
+                    </div>
+                  </>
+                )}
+                <span className="text-foreground-muted text-[11px]">({totalCount} Total)</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span>{activeCount} live reachable devices, {offlineCount} offline/disconnected from {totalCount} discovered</span>
+            </TooltipContent>
+          </Tooltip>
 
           {/* Quick Pause All / Resume Button */}
           <Tooltip>
@@ -188,7 +213,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ activeTab, setActiveTab })
                 <button
                   onClick={() => {
                     setIsAlertsOpen(false);
-                    setActiveTab('security');
+                    navigate('/security');
                   }}
                   className="text-xs font-medium text-primary hover:underline cursor-pointer"
                 >

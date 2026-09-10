@@ -18,9 +18,11 @@ class DeviceService {
         const existing = this.memoryStore.get(obj.id);
         if (existing) {
           obj.todayBytesTotal = Math.max(existing.todayBytesTotal || 0, obj.todayBytesTotal || 0);
-          obj.currentDownloadBps = existing.currentDownloadBps ?? obj.currentDownloadBps;
-          obj.currentUploadBps = existing.currentUploadBps ?? obj.currentUploadBps;
-          obj.status = existing.status ?? obj.status;
+          obj.currentDownloadBps = obj.status === 'offline' ? 0 : (existing.currentDownloadBps ?? obj.currentDownloadBps);
+          obj.currentUploadBps = obj.status === 'offline' ? 0 : (existing.currentUploadBps ?? obj.currentUploadBps);
+          if (existing.status === 'paused' || existing.status === 'blocked' || existing.status === 'throttled') {
+            obj.status = existing.status;
+          }
           obj.isThrottled = existing.isThrottled ?? obj.isThrottled;
         }
         this.memoryStore.set(obj.id, obj);
@@ -61,12 +63,16 @@ class DeviceService {
     return list.map((d) => {
       const mem = this.memoryStore.get(d.id);
       if (mem) {
+        const status = (mem.status === 'paused' || mem.status === 'blocked' || mem.status === 'throttled')
+          ? mem.status
+          : d.status;
+        const isOffline = status === 'offline';
         return {
           ...d,
-          currentDownloadBps: mem.currentDownloadBps ?? d.currentDownloadBps,
-          currentUploadBps: mem.currentUploadBps ?? d.currentUploadBps,
+          status,
+          currentDownloadBps: isOffline ? 0 : (mem.currentDownloadBps ?? d.currentDownloadBps),
+          currentUploadBps: isOffline ? 0 : (mem.currentUploadBps ?? d.currentUploadBps),
           todayBytesTotal: Math.max(d.todayBytesTotal || 0, mem.todayBytesTotal || 0),
-          status: mem.status ?? d.status,
           isThrottled: mem.isThrottled ?? d.isThrottled,
         };
       }

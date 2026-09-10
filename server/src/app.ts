@@ -1,10 +1,16 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import swaggerUi from 'swagger-ui-express';
 import apiRouter from './routes/index.js';
 import { errorHandler, notFound } from './middlewares/errorHandler.js';
-import { ENV } from './config/env.js';
 import { swaggerDocument } from './docs/swaggerSpec.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const clientDistPath = path.resolve(__dirname, '../../client/dist');
 
 export function createApp() {
   const app = express();
@@ -32,10 +38,27 @@ export function createApp() {
   // Interactive Swagger UI documentation
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-  // API router
+  // REST API router
   app.use('/api', apiRouter);
 
-  // 404 & Error Handlers
+  // Unified Production Delivery: Serve static frontend files if client/dist exists
+  if (fs.existsSync(clientDistPath)) {
+    app.use(express.static(clientDistPath));
+
+    // SPA catch-all fallback for client-side HTML5 routing
+    app.get('*', (req, res, next) => {
+      if (
+        req.path.startsWith('/api') ||
+        req.path.startsWith('/api-docs') ||
+        req.path.startsWith('/health')
+      ) {
+        return next();
+      }
+      res.sendFile(path.join(clientDistPath, 'index.html'));
+    });
+  }
+
+  // 404 & Error Handlers for unhandled API routes
   app.use(notFound);
   app.use(errorHandler);
 

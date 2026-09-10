@@ -53,7 +53,7 @@ class TelemetryService {
     const deviceSpeeds: Record<string, { downBps: number; upBps: number }> = {};
 
     for (const dev of devices) {
-      if (dev.status === 'paused' || dev.status === 'blocked') {
+      if (dev.status === 'offline' || dev.status === 'paused' || dev.status === 'blocked') {
         deviceSpeeds[dev.id] = { downBps: 0, upBps: 0 };
         continue;
       }
@@ -65,10 +65,10 @@ class TelemetryService {
           upBps: wanUploadTotal,
         };
       } else {
-        // Other active devices on the subnet remain idle unless engaged
+        // Other devices on subnet report honest zero unless actively transmitting
         deviceSpeeds[dev.id] = {
-          downBps: dev.status === 'active' ? Math.floor(Math.random() * 2500) : 0,
-          upBps: dev.status === 'active' ? Math.floor(Math.random() * 800) : 0,
+          downBps: 0,
+          upBps: 0,
         };
       }
     }

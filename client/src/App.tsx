@@ -1,69 +1,109 @@
 import * as React from 'react';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useParams,
+  useLocation,
+} from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './components/ui/Toast';
 import { WebSocketProvider } from './context/WebSocketContext';
 import { DeviceProvider, useDevices } from './context/DeviceContext';
 import { TooltipProvider } from './components/ui/Tooltip';
 import { AppShell } from './components/layout/AppShell';
-
-import { OverviewView } from './components/views/OverviewView';
-import { DevicesView } from './components/views/DevicesView';
-import { DeviceDetailDrawer } from './components/views/DeviceDetailDrawer';
-import { DeviceDetailView } from './components/views/DeviceDetailView';
-import { ActivityView } from './components/views/ActivityView';
-import { RulesView } from './components/views/RulesView';
-import { SecurityView } from './components/views/SecurityView';
-import { SettingsView } from './components/views/SettingsView';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { LoadingFallback } from './components/common/LoadingFallback';
+import { NotFoundView } from './components/views/NotFoundView';
 import { ThrottleModal } from './components/views/ThrottleModal';
 import { KickConfirmModal } from './components/views/KickConfirmModal';
+import { DeviceDetailDrawer } from './components/views/DeviceDetailDrawer';
 import { Device } from './types/device';
 
+// Route-level code-splitting with React.lazy
+const OverviewView = React.lazy(() =>
+  import('./components/views/OverviewView').then((m) => ({ default: m.OverviewView }))
+);
+const DevicesView = React.lazy(() =>
+  import('./components/views/DevicesView').then((m) => ({ default: m.DevicesView }))
+);
+const DeviceDetailView = React.lazy(() =>
+  import('./components/views/DeviceDetailView').then((m) => ({ default: m.DeviceDetailView }))
+);
+const ActivityView = React.lazy(() =>
+  import('./components/views/ActivityView').then((m) => ({ default: m.ActivityView }))
+);
+const RulesView = React.lazy(() =>
+  import('./components/views/RulesView').then((m) => ({ default: m.RulesView }))
+);
+const SecurityView = React.lazy(() =>
+  import('./components/views/SecurityView').then((m) => ({ default: m.SecurityView }))
+);
+const SettingsView = React.lazy(() =>
+  import('./components/views/SettingsView').then((m) => ({ default: m.SettingsView }))
+);
+
+// Wrapper for dedicated device profile route (/devices/:id)
+const DeviceProfileWrapper: React.FC<{
+  onOpenThrottleModal: (device: Device) => void;
+  onOpenKickModal: (device: Device) => void;
+}> = ({ onOpenThrottleModal, onOpenKickModal }) => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  if (!id) {
+    return <Navigate to="/devices" replace />;
+  }
+
+  return (
+    <DeviceDetailView
+      deviceId={id}
+      onBack={() => navigate('/devices')}
+      onOpenThrottleModal={onOpenThrottleModal}
+      onOpenKickModal={onOpenKickModal}
+    />
+  );
+};
+
 const AppContent: React.FC = () => {
-  const [activeTab, setActiveTab] = React.useState('overview');
-  const [viewingDeviceId, setViewingDeviceId] = React.useState<string | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
   const { devices, selectedDevice, setSelectedDevice } = useDevices();
 
   const [throttleDevice, setThrottleDevice] = React.useState<Device | null>(null);
   const [kickDevice, setKickDevice] = React.useState<Device | null>(null);
 
-  // Helper to parse route from hash or pathname
-  const parseCurrentRoute = React.useCallback(() => {
-    const hash = window.location.hash.replace(/^#\/?/, '');
-    const pathname = window.location.pathname.replace(/^\//, '');
-    const route = hash || pathname;
-
-    if (route.startsWith('devices/')) {
-      const devId = route.replace('devices/', '');
-      return { tab: 'devices', deviceId: devId || null };
-    }
-
-    const validTabs = ['overview', 'devices', 'activity', 'rules', 'security', 'settings'];
-    if (validTabs.includes(route)) {
-      return { tab: route, deviceId: null };
-    }
-
-    return { tab: 'overview', deviceId: null };
-  }, []);
-
-  // Listen to URL hash & popstate changes for back/forward navigation & deep-linking
+  // 1. Auto-migrate legacy hash bookmarks (e.g. `/#/devices` -> `/devices`)
   React.useEffect(() => {
-    const syncRouteFromUrl = () => {
-      const { tab, deviceId } = parseCurrentRoute();
-      setActiveTab(tab);
-      setViewingDeviceId(deviceId);
+    if (window.location.hash.startsWith('#/')) {
+      const targetPath = window.location.hash.replace(/^#/, '');
+      window.history.replaceState(null, '', targetPath);
+      navigate(targetPath, { replace: true });
+    }
+  }, [navigate]);
+
+  // 2. Dynamic document title updater
+  React.useEffect(() => {
+    const titles: Record<string, string> = {
+      '/': 'Overview',
+      '/devices': `Devices (${devices.length})`,
+      '/activity': 'Activity & DNS',
+      '/rules': 'Rules & Bedtime',
+      '/security': 'Security & Threats',
+      '/settings': 'Gateway Settings',
     };
 
-    window.addEventListener('hashchange', syncRouteFromUrl);
-    window.addEventListener('popstate', syncRouteFromUrl);
+    let titleSuffix = 'Overview';
+    if (titles[location.pathname]) {
+      titleSuffix = titles[location.pathname];
+    } else if (location.pathname.startsWith('/devices/')) {
+      titleSuffix = 'Device Profile';
+    }
 
-    // Initial sync
-    syncRouteFromUrl();
-
-    return () => {
-      window.removeEventListener('hashchange', syncRouteFromUrl);
-      window.removeEventListener('popstate', syncRouteFromUrl);
-    };
-  }, [parseCurrentRoute]);
+    document.title = `Wi-Fi Sentinel — ${titleSuffix}`;
+  }, [location.pathname, devices.length]);
 
   const handleSelectDevice = (id: string) => {
     const found = devices.find((d) => d.id === id) || null;
@@ -72,63 +112,56 @@ const AppContent: React.FC = () => {
 
   const handleOpenFullDetails = (id: string) => {
     setSelectedDevice(null);
-    setViewingDeviceId(id);
-    window.location.hash = `#/devices/${id}`;
-  };
-
-  const handleBackFromDevice = () => {
-    setViewingDeviceId(null);
-    setActiveTab('devices');
-    window.location.hash = `#/devices`;
-  };
-
-  const handleTabChange = (tab: string) => {
-    setViewingDeviceId(null);
-    setActiveTab(tab);
-    window.location.hash = `#/${tab}`;
+    navigate(`/devices/${id}`);
   };
 
   return (
-    <AppShell
-      activeTab={activeTab}
-      setActiveTab={handleTabChange}
-      hideTabs={!!viewingDeviceId}
-    >
-      {viewingDeviceId ? (
-        <DeviceDetailView
-          deviceId={viewingDeviceId}
-          onBack={handleBackFromDevice}
-          onOpenThrottleModal={setThrottleDevice}
-          onOpenKickModal={setKickDevice}
-        />
-      ) : (
-        <>
-          {activeTab === 'overview' && (
-            <OverviewView
-              onSelectDevice={handleSelectDevice}
-              onNavigateTab={handleTabChange}
-              onOpenFullDetails={handleOpenFullDetails}
-            />
-          )}
+    <AppShell>
+      <React.Suspense fallback={<LoadingFallback />}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <OverviewView
+                onSelectDevice={handleSelectDevice}
+                onNavigateTab={(tab) => navigate(`/${tab === 'overview' ? '' : tab}`)}
+                onOpenFullDetails={handleOpenFullDetails}
+              />
+            }
+          />
+          <Route path="/overview" element={<Navigate to="/" replace />} />
 
-          {activeTab === 'devices' && (
-            <DevicesView
-              onSelectDevice={handleSelectDevice}
-              onOpenThrottleModal={setThrottleDevice}
-              onOpenKickModal={setKickDevice}
-              onOpenFullDetails={handleOpenFullDetails}
-            />
-          )}
+          <Route
+            path="/devices"
+            element={
+              <DevicesView
+                onSelectDevice={handleSelectDevice}
+                onOpenThrottleModal={setThrottleDevice}
+                onOpenKickModal={setKickDevice}
+                onOpenFullDetails={handleOpenFullDetails}
+              />
+            }
+          />
 
-          {activeTab === 'activity' && <ActivityView />}
+          <Route
+            path="/devices/:id"
+            element={
+              <DeviceProfileWrapper
+                onOpenThrottleModal={setThrottleDevice}
+                onOpenKickModal={setKickDevice}
+              />
+            }
+          />
 
-          {activeTab === 'rules' && <RulesView />}
+          <Route path="/activity" element={<ActivityView />} />
+          <Route path="/rules" element={<RulesView />} />
+          <Route path="/security" element={<SecurityView />} />
+          <Route path="/settings" element={<SettingsView />} />
 
-          {activeTab === 'security' && <SecurityView />}
-
-          {activeTab === 'settings' && <SettingsView />}
-        </>
-      )}
+          {/* 404 Catch-All */}
+          <Route path="*" element={<NotFoundView />} />
+        </Routes>
+      </React.Suspense>
 
       {/* Slide-over Device Inspector Drawer */}
       <DeviceDetailDrawer
@@ -157,20 +190,24 @@ const AppContent: React.FC = () => {
   );
 };
 
-export function App() {
+export const App: React.FC = () => {
   return (
-    <ThemeProvider>
-      <ToastProvider>
-        <TooltipProvider delayDuration={150}>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <ToastProvider>
           <WebSocketProvider>
             <DeviceProvider>
-              <AppContent />
+              <TooltipProvider>
+                <BrowserRouter>
+                  <AppContent />
+                </BrowserRouter>
+              </TooltipProvider>
             </DeviceProvider>
           </WebSocketProvider>
-        </TooltipProvider>
-      </ToastProvider>
-    </ThemeProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
-}
+};
 
 export default App;

@@ -66,6 +66,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   }, [addListener]);
 
   const activeDevices = devices.filter((d) => d.status === 'active');
+  const offlineDevices = devices.filter((d) => d.status === 'offline');
   const pausedDevices = devices.filter((d) => d.status === 'paused');
   const totalTodayBytes = devices.reduce((sum, d) => sum + (d.todayBytesTotal || 0), 0);
 
@@ -90,7 +91,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               </Badge>
             </div>
             <p className="text-[11px] text-foreground-muted mt-0.5">
-              Live physical device discovery & telemetry via ARP and hardware counters
+              Live physical device reachability probing via ICMP ping & hardware counters
             </p>
           </div>
         </div>
@@ -103,7 +104,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           className="h-8 gap-1.5 text-xs border-border bg-card hover:bg-secondary/60 w-full sm:w-auto"
         >
           <RefreshCw className={cn('h-3.5 w-3.5', isScanning && 'animate-spin text-primary')} />
-          {isScanning ? 'Scanning Wi-Fi...' : 'Scan Subnet'}
+          {isScanning ? 'Probing Network...' : 'Scan & Probe Subnet'}
         </Button>
       </div>
 
@@ -112,11 +113,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         <StatCard
           label="Active Connected Devices"
           value={activeDevices.length}
-          subtext={`${pausedDevices.length} paused • ${devices.length} real devices discovered`}
+          subtext={`${offlineDevices.length} offline • ${pausedDevices.length} paused • ${devices.length} total discovered`}
           icon={<Wifi className="h-4 w-4" />}
           trend={{ value: `${devices.filter(d => d.isNew).length} new`, isPositive: true }}
           onClick={() => onNavigateTab('devices')}
-          className="group hover:border-primary/50"
+          className="group hover:border-primary/50 cursor-pointer"
         />
         <StatCard
           label="WAN Ingress (Download)"
@@ -160,6 +161,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <CardContent className="space-y-3">
               {topConsumers.map((dev) => {
                 const isPaused = dev.status === 'paused';
+                const isOffline = dev.status === 'offline';
                 const percentOfMax = Math.min(
                   100,
                   Math.round((dev.todayBytesTotal / (topConsumers[0]?.todayBytesTotal || 1)) * 100)
@@ -168,7 +170,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 return (
                   <div
                     key={dev.id}
-                    className="flex items-center justify-between p-3 rounded-lg border border-border bg-card/60 hover:bg-secondary/40 transition-colors"
+                    className={cn(
+                      'flex items-center justify-between p-3 rounded-lg border border-border bg-card/60 hover:bg-secondary/40 transition-colors',
+                      isOffline && 'opacity-70 hover:opacity-100'
+                    )}
                   >
                     <div
                       className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
@@ -182,6 +187,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                           </span>
                           {dev.isThrottled && <Badge variant="throttled">Throttled</Badge>}
                           {isPaused && <Badge variant="paused">Paused</Badge>}
+                          {isOffline && <Badge variant="offline" dot>Offline</Badge>}
                         </div>
                         <div className="flex items-center gap-2 text-[11px] text-foreground-muted mt-0.5">
                           <span>{dev.ip}</span>
@@ -202,17 +208,24 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
                     <div className="flex items-center gap-3 ml-4">
                       <div className="text-right font-mono text-xs tabular-nums">
-                        <div className="text-emerald-600 dark:text-emerald-400">
-                          {formatSpeed(dev.currentDownloadBps)}
-                        </div>
-                        <div className="text-[10px] text-foreground-muted">
-                          {formatSpeed(dev.currentUploadBps)} ↑
-                        </div>
+                        {isOffline ? (
+                          <span className="text-foreground-muted text-[11px]">0 B/s (Offline)</span>
+                        ) : (
+                          <>
+                            <div className="text-emerald-600 dark:text-emerald-400">
+                              {formatSpeed(dev.currentDownloadBps)}
+                            </div>
+                            <div className="text-[10px] text-foreground-muted">
+                              {formatSpeed(dev.currentUploadBps)} ↑
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       <Button
-                        variant={isPaused ? 'subtle' : 'secondary'}
+                        variant={isPaused ? 'subtle' : isOffline ? 'ghost' : 'secondary'}
                         size="icon-sm"
+                        disabled={isOffline}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (isPaused) {

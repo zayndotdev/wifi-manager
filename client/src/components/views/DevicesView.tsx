@@ -31,6 +31,8 @@ import {
   AlertCircle,
   RefreshCw,
   ExternalLink,
+  WifiOff,
+  Radio,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -55,6 +57,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editNameValue, setEditNameValue] = React.useState('');
 
+  const activeCount = devices.filter((d) => d.status === 'active').length;
+  const offlineCount = devices.filter((d) => d.status === 'offline').length;
+
   // Filter devices
   const filteredDevices = React.useMemo(() => {
     return devices.filter((d) => {
@@ -68,6 +73,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
       if (!matchesSearch) return false;
 
       if (statusFilter === 'active') return d.status === 'active';
+      if (statusFilter === 'offline') return d.status === 'offline';
       if (statusFilter === 'paused') return d.status === 'paused';
       if (statusFilter === 'blocked') return d.status === 'blocked';
       if (statusFilter === 'iot') return d.category === 'iot';
@@ -104,7 +110,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
         {/* Filter Pills + View Switcher */}
         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end overflow-x-auto">
           <div className="flex items-center gap-1 bg-secondary/70 p-0.5 rounded-md border border-border">
-            {['all', 'active', 'paused', 'blocked', 'iot'].map((st) => (
+            {['all', 'active', 'offline', 'paused', 'blocked', 'iot'].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -116,6 +122,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                 )}
               >
                 {st}
+                {st === 'active' && ` (${activeCount})`}
+                {st === 'offline' && ` (${offlineCount})`}
               </button>
             ))}
           </div>
@@ -140,17 +148,31 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
       </div>
 
       {/* Device Count Summary & Action */}
-      <div className="flex items-center justify-between text-xs text-foreground-secondary px-1">
-        <span>Showing <strong className="text-foreground font-medium">{filteredDevices.length}</strong> real network devices</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-foreground-secondary px-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span>
+            Showing <strong className="text-foreground font-medium">{filteredDevices.length}</strong> devices
+          </span>
+          <span className="text-border">|</span>
+          <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block" />
+            {activeCount} Live Reachable
+          </span>
+          <span className="text-border">|</span>
+          <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-400 inline-block" />
+            {offlineCount} Offline / Disconnected
+          </span>
+        </div>
         <Button
           variant="outline"
           size="sm"
           onClick={scanNetwork}
           disabled={isScanning}
-          className="h-8 gap-1.5 text-xs border-border bg-card hover:bg-secondary/60"
+          className="h-8 gap-1.5 text-xs border-border bg-card hover:bg-secondary/60 self-start sm:self-auto"
         >
           <RefreshCw className={cn('h-3.5 w-3.5', isScanning && 'animate-spin text-primary')} />
-          {isScanning ? 'Scanning Wi-Fi...' : 'Scan Network'}
+          {isScanning ? 'Probing Reachability...' : 'Scan & Probe Network'}
         </Button>
       </div>
 
@@ -182,6 +204,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
           {filteredDevices.map((dev) => {
             const isPaused = dev.status === 'paused';
             const isBlocked = dev.status === 'blocked';
+            const isOffline = dev.status === 'offline';
             const isEditing = editingId === dev.id;
 
             return (
@@ -191,7 +214,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                 className={cn(
                   'p-4 transition-all flex flex-col justify-between hover:border-primary/50 hover:shadow-subtle cursor-pointer select-none',
                   isPaused && 'border-rose-500/30 bg-rose-500/[0.02]',
-                  isBlocked && 'border-red-500/40 opacity-75'
+                  isBlocked && 'border-red-500/40 opacity-75',
+                  isOffline && 'border-border/60 bg-secondary/15 opacity-70 hover:opacity-100 hover:border-border'
                 )}
               >
                 <div>
@@ -254,6 +278,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                         <Badge variant="paused">Paused</Badge>
                       ) : isBlocked ? (
                         <Badge variant="blocked">Banned</Badge>
+                      ) : isOffline ? (
+                        <Badge variant="offline" dot>Offline</Badge>
                       ) : (
                         <Badge variant="online" dot>Active</Badge>
                       )}
@@ -278,9 +304,11 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                             <DropdownMenuItem onClick={() => handleStartRename(dev)}>
                               Rename Device
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onOpenThrottleModal(dev)}>
-                              <Sliders className="h-3 w-3 mr-2" /> Speed Limit
-                            </DropdownMenuItem>
+                            {!isOffline && (
+                              <DropdownMenuItem onClick={() => onOpenThrottleModal(dev)}>
+                                <Sliders className="h-3 w-3 mr-2" /> Speed Limit
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               destructive
@@ -309,13 +337,34 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                     <div>
                       <span className="text-foreground-muted block text-[10px]">Signal & Band</span>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <RssiIndicator dbm={dev.signalDbm} />
-                        <span className="text-[10px] text-foreground-muted">({dev.band})</span>
+                        {isOffline ? (
+                          <span className="text-[10px] text-foreground-muted">Offline</span>
+                        ) : (
+                          <>
+                            <RssiIndicator dbm={dev.signalDbm} />
+                            <span className="text-[10px] text-foreground-muted">({dev.band})</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div>
-                      <span className="text-foreground-muted block text-[10px]">Node AP</span>
-                      <span className="text-foreground truncate block">{dev.meshNodeName}</span>
+                      <span className="text-foreground-muted block text-[10px]">Estimated Distance</span>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {isOffline ? (
+                          <span className="text-foreground-muted text-[11px]">—</span>
+                        ) : (
+                          <>
+                            <span className="font-mono text-foreground font-medium text-xs">
+                              {dev.estimatedDistanceMeters != null ? `~${dev.estimatedDistanceMeters}m` : 'Local'}
+                            </span>
+                            {dev.latencyMs != null && (
+                              <span className="text-[10px] text-foreground-muted">
+                                ({dev.latencyMs}ms)
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <span className="text-foreground-muted block text-[10px]">Today's Usage</span>
@@ -326,19 +375,29 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
 
                 {/* Card Footer: Live Speed + Pause Action Button */}
                 <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/60">
-                  <div className="font-mono text-xs tabular-nums">
-                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                      {formatSpeed(dev.currentDownloadBps)}
-                    </span>
-                    <span className="text-foreground-muted text-[10px] ml-1.5">
-                      {formatSpeed(dev.currentUploadBps)} ↑
-                    </span>
-                  </div>
+                  {isOffline ? (
+                    <div className="text-xs text-foreground-muted">
+                      <span className="font-mono text-slate-400">0 B/s</span>
+                      <span className="text-[10px] ml-1.5 text-foreground-muted">
+                        • {dev.lastSeenAt ? `Seen ${new Date(dev.lastSeenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Disconnected'}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="font-mono text-xs tabular-nums">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                        {formatSpeed(dev.currentDownloadBps)}
+                      </span>
+                      <span className="text-foreground-muted text-[10px] ml-1.5">
+                        {formatSpeed(dev.currentUploadBps)} ↑
+                      </span>
+                    </div>
+                  )}
 
                   <Button
-                    variant={isPaused ? 'subtle' : 'secondary'}
+                    variant={isPaused ? 'subtle' : isOffline ? 'ghost' : 'secondary'}
                     size="sm"
-                    className="h-7 text-xs gap-1.5"
+                    className={cn('h-7 text-xs gap-1.5', isOffline && 'text-foreground-muted opacity-60')}
+                    disabled={isOffline}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (isPaused) {
@@ -348,8 +407,14 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       }
                     }}
                   >
-                    {isPaused ? <Play className="h-3 w-3 fill-current text-primary" /> : <Pause className="h-3 w-3" />}
-                    <span>{isPaused ? 'Resume' : 'Pause'}</span>
+                    {isPaused ? (
+                      <Play className="h-3 w-3 fill-current text-primary" />
+                    ) : isOffline ? (
+                      <WifiOff className="h-3 w-3 text-foreground-muted" />
+                    ) : (
+                      <Pause className="h-3 w-3" />
+                    )}
+                    <span>{isPaused ? 'Resume' : isOffline ? 'Offline' : 'Pause'}</span>
                   </Button>
                 </div>
               </Card>
@@ -367,8 +432,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                 <tr>
                   <th className="p-3 font-semibold">Device</th>
                   <th className="p-3 font-semibold">IP & MAC</th>
-                  <th className="p-3 font-semibold">Signal</th>
-                  <th className="p-3 font-semibold">AP Node</th>
+                  <th className="p-3 font-semibold">Signal & Band</th>
+                  <th className="p-3 font-semibold">Distance (RTT)</th>
                   <th className="p-3 font-semibold">Current Speed</th>
                   <th className="p-3 font-semibold">Today's Data</th>
                   <th className="p-3 font-semibold">Status</th>
@@ -378,10 +443,14 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
               <tbody className="divide-y divide-border">
                 {filteredDevices.map((dev) => {
                   const isPaused = dev.status === 'paused';
+                  const isOffline = dev.status === 'offline';
                   return (
                     <tr
                       key={dev.id}
-                      className="hover:bg-secondary/30 transition-colors cursor-pointer"
+                      className={cn(
+                        'hover:bg-secondary/30 transition-colors cursor-pointer',
+                        isOffline && 'opacity-65 hover:opacity-100'
+                      )}
                       onClick={() => onSelectDevice(dev.id)}
                     >
                       <td className="p-3">
@@ -392,7 +461,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                               {dev.nickname || dev.hostname}
                             </span>
                             <span className="text-[10px] text-foreground-muted block truncate">
-                              {dev.vendor}
+                              {dev.vendor} • {dev.category}
                             </span>
                           </div>
                         </div>
@@ -402,18 +471,42 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                         <span className="block text-[10px] text-foreground-muted">{dev.mac}</span>
                       </td>
                       <td className="p-3">
-                        <RssiIndicator dbm={dev.signalDbm} />
+                        {isOffline ? (
+                          <span className="text-foreground-muted text-[11px]">—</span>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <RssiIndicator dbm={dev.signalDbm} />
+                            <span className="text-[10px] text-foreground-muted">({dev.band})</span>
+                          </div>
+                        )}
                       </td>
-                      <td className="p-3 text-foreground-secondary truncate max-w-[120px]">
-                        {dev.meshNodeName}
+                      <td className="p-3">
+                        {isOffline ? (
+                          <span className="text-foreground-muted text-[11px]">Offline</span>
+                        ) : (
+                          <div>
+                            <span className="font-mono text-foreground font-medium block">
+                              {dev.estimatedDistanceMeters != null ? `~${dev.estimatedDistanceMeters}m` : 'Local'}
+                            </span>
+                            <span className="text-[10px] text-foreground-muted block">
+                              {dev.latencyMs != null ? `${dev.latencyMs}ms RTT` : ''}
+                            </span>
+                          </div>
+                        )}
                       </td>
                       <td className="p-3 font-mono tabular-nums">
-                        <div className="text-emerald-600 dark:text-emerald-400 font-medium">
-                          {formatSpeed(dev.currentDownloadBps)}
-                        </div>
-                        <div className="text-[10px] text-foreground-muted">
-                          {formatSpeed(dev.currentUploadBps)} ↑
-                        </div>
+                        {isOffline ? (
+                          <span className="text-foreground-muted">0 B/s</span>
+                        ) : (
+                          <>
+                            <div className="text-emerald-600 dark:text-emerald-400 font-medium">
+                              {formatSpeed(dev.currentDownloadBps)}
+                            </div>
+                            <div className="text-[10px] text-foreground-muted">
+                              {formatSpeed(dev.currentUploadBps)} ↑
+                            </div>
+                          </>
+                        )}
                       </td>
                       <td className="p-3 font-medium text-foreground">
                         {formatBytes(dev.todayBytesTotal)}
@@ -423,6 +516,8 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                           <Badge variant="paused">Paused</Badge>
                         ) : dev.status === 'blocked' ? (
                           <Badge variant="blocked">Banned</Badge>
+                        ) : isOffline ? (
+                          <Badge variant="offline" dot>Offline</Badge>
                         ) : (
                           <Badge variant="online" dot>Active</Badge>
                         )}
@@ -430,14 +525,21 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
                           <Button
-                            variant={isPaused ? 'subtle' : 'secondary'}
+                            variant={isPaused ? 'subtle' : isOffline ? 'ghost' : 'secondary'}
                             size="icon-sm"
+                            disabled={isOffline}
                             onClick={() => {
                               if (isPaused) resumeDevice(dev.id);
                               else pauseDevice(dev.id);
                             }}
                           >
-                            {isPaused ? <Play className="h-3 w-3 fill-current text-primary" /> : <Pause className="h-3 w-3" />}
+                            {isPaused ? (
+                              <Play className="h-3 w-3 fill-current text-primary" />
+                            ) : isOffline ? (
+                              <WifiOff className="h-3 w-3 text-foreground-muted" />
+                            ) : (
+                              <Pause className="h-3 w-3" />
+                            )}
                           </Button>
                         </div>
                       </td>

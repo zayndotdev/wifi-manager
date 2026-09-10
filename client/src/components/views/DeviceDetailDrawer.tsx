@@ -20,6 +20,7 @@ import {
   Clock,
   Radio,
   Wifi,
+  WifiOff,
   ExternalLink,
 } from 'lucide-react';
 
@@ -59,13 +60,17 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
 
   const isPaused = device.status === 'paused';
   const isBlocked = device.status === 'blocked';
+  const isOffline = device.status === 'offline';
 
-  const proximityLabel =
-    device.signalDbm >= -50
-      ? 'Immediate Room (< 3m)'
-      : device.signalDbm >= -68
-      ? 'Adjacent Room (3 - 8m)'
-      : 'Edge of Coverage (> 8m)';
+  const proximityLabel = isOffline
+    ? 'Offline / Disconnected'
+    : device.estimatedDistanceMeters != null
+    ? `~${device.estimatedDistanceMeters}m (${device.proximityTier === 'immediate' ? 'Immediate Room' : device.proximityTier === 'adjacent' ? 'Adjacent Room' : 'Far Area'})`
+    : device.signalDbm >= -50
+    ? 'Immediate Room (< 3m)'
+    : device.signalDbm >= -68
+    ? 'Adjacent Room (3 - 8m)'
+    : 'Edge of Coverage (> 8m)';
 
   const categories: DeviceCategory[] = [
     'phone',
@@ -102,21 +107,37 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
           </Button>
         )}
 
+        {/* Offline Banner */}
+        {isOffline && (
+          <div className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300">
+            <WifiOff className="h-4 w-4 text-slate-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="font-semibold block">Device is currently offline</span>
+              <span className="text-[10px] text-foreground-muted block">
+                {device.lastSeenAt ? `Last active ${new Date(device.lastSeenAt).toLocaleString()}` : 'Unreachable on local network'}
+              </span>
+            </div>
+            <Badge variant="offline" dot>Offline</Badge>
+          </div>
+        )}
+
         {/* Top Action Bar */}
         <div className="flex items-center gap-2 p-2 rounded-xl border border-border/80 bg-secondary/30">
           <Button
             variant={isPaused ? 'primary' : 'secondary'}
             size="sm"
+            disabled={isOffline}
             className="flex-1 gap-1.5 h-7 text-xs rounded-lg"
             onClick={() => (isPaused ? resumeDevice(device.id) : pauseDevice(device.id))}
           >
             {isPaused ? <Play className="h-3 w-3 fill-current" /> : <Pause className="h-3 w-3" />}
-            <span>{isPaused ? 'Resume Internet' : 'Pause Internet'}</span>
+            <span>{isPaused ? 'Resume Internet' : isOffline ? 'Device Offline' : 'Pause Internet'}</span>
           </Button>
 
           <Button
             variant="outline"
             size="sm"
+            disabled={isOffline}
             className="gap-1.5 h-7 text-xs rounded-lg border-border"
             onClick={() => {
               onClose();
@@ -137,13 +158,13 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
             <div>
               <span className="text-[10px] text-foreground-muted block">Download Rate</span>
               <span className="font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                {formatSpeed(device.currentDownloadBps)}
+                {isOffline ? '0 B/s' : formatSpeed(device.currentDownloadBps)}
               </span>
             </div>
             <div>
               <span className="text-[10px] text-foreground-muted block">Upload Rate</span>
               <span className="font-mono text-sm font-semibold text-primary">
-                {formatSpeed(device.currentUploadBps)}
+                {isOffline ? '0 B/s' : formatSpeed(device.currentUploadBps)}
               </span>
             </div>
             <div className="pt-2 border-t border-border/60 col-span-2 flex items-center justify-between text-[11px]">
@@ -225,9 +246,15 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
               <RssiIndicator dbm={device.signalDbm} />
             </div>
             <div className="flex justify-between items-center py-1">
-              <span className="text-foreground-secondary">Estimated Proximity</span>
+              <span className="text-foreground-secondary">Estimated Distance</span>
               <span className="text-foreground font-medium">{proximityLabel}</span>
             </div>
+            {!isOffline && device.latencyMs != null && (
+              <div className="flex justify-between items-center py-1">
+                <span className="text-foreground-secondary">Measured Ping (RTT)</span>
+                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-medium">{device.latencyMs} ms</span>
+              </div>
+            )}
           </div>
         </div>
 
