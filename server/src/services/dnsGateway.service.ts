@@ -2,6 +2,8 @@ import dgram from 'dgram';
 import dnsPacket from 'dns-packet';
 import { trafficService } from './traffic.service.js';
 import { telemetryBroadcaster } from '../websocket/telemetryServer.js';
+import { systemLogger } from './systemLogger.service.js';
+import { deviceService } from './device.service.js';
 
 export interface DnsSinkholeStats {
   totalQueries: number;
@@ -73,12 +75,14 @@ class DnsGatewayService {
     if (!ip) return;
     this.pausedIps.add(ip.trim());
     console.log(`[DnsGateway] Enforcing physical DNS pause for IP: ${ip}`);
+    systemLogger.network('DNS', `Engaged Port 53 UDP Sinkhole for IP ${ip}. All domain resolution dropped.`);
   }
 
   public resumeDevice(ip: string): void {
     if (!ip) return;
     this.pausedIps.delete(ip.trim());
     console.log(`[DnsGateway] Restored physical DNS access for IP: ${ip}`);
+    systemLogger.network('DNS', `Restored Port 53 UDP domain resolution for IP ${ip}.`);
   }
 
   public isDevicePaused(ip: string): boolean {
@@ -128,6 +132,12 @@ class DnsGatewayService {
     const isClientPaused = this.pausedIps.has(clientIp);
     const isDomainBlocked = this.blockedDomains.has(qName);
 
+    // Resolve matching device profile
+    const allDevs = (deviceService as any)['memoryStore'] ? Array.from((deviceService as any)['memoryStore'].values()) : [];
+    const targetDev: any = allDevs.find((d: any) => d.ip === clientIp);
+    const resolvedDeviceId = targetDev ? targetDev.id : `ip_${clientIp.replace(/\./g, '_')}`;
+    const resolvedDeviceName = targetDev ? (targetDev.nickname || targetDev.hostname) : clientIp;
+
     // 1. PHYSICAL ENFORCEMENT: Client is Paused OR Domain is Blocked -> Sinkhole immediately!
     if (isClientPaused || isDomainBlocked) {
       this.blockedQueries++;
@@ -165,8 +175,8 @@ class DnsGatewayService {
           id: `dom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           domain: qName || 'blocked-query',
           category: isClientPaused ? 'general' : 'ad_tracker',
-          deviceId: `ip_${clientIp.replace(/\./g, '_')}`,
-          deviceNickname: isClientPaused ? `Paused Client (${clientIp})` : clientIp,
+          deviceId: resolvedDeviceId,
+          deviceNickname: isClientPaused ? `Paused Client (${resolvedDeviceName})` : resolvedDeviceName,
           timestamp: new Date(),
           status: 'blocked',
           queryCountToday: 1,
@@ -202,8 +212,8 @@ class DnsGatewayService {
             id: `dom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
             domain: qName,
             category: 'general',
-            deviceId: `ip_${clientIp.replace(/\./g, '_')}`,
-            deviceNickname: clientIp,
+            deviceId: resolvedDeviceId,
+            deviceNickname: resolvedDeviceName,
             timestamp: new Date(),
             status: 'allowed',
             queryCountToday: 1,

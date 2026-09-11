@@ -22,6 +22,7 @@ import {
   KeyRound,
   CheckCircle2,
   AlertTriangle,
+  Zap,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -29,6 +30,15 @@ export const SettingsView: React.FC = () => {
   const { palette, setPalette, themes } = useTheme();
   const [meshNodes, setMeshNodes] = React.useState<MeshNode[]>([]);
   const { toast } = useToast();
+
+  // Autonomous SaaS L2 ARP Engine State
+  const [arpStatus, setArpStatus] = React.useState<{
+    available: boolean;
+    enginePath: string;
+    driverStatus: 'ready' | 'npcap_missing' | 'error';
+    activePauses: string[];
+  } | null>(null);
+  const [isLaunchingDriver, setIsLaunchingDriver] = React.useState(false);
 
   // Router Hardware Integration State
   const [routerIp, setRouterIp] = React.useState('192.168.1.1');
@@ -60,6 +70,7 @@ export const SettingsView: React.FC = () => {
 
   React.useEffect(() => {
     api.getMeshNodes().then(setMeshNodes).catch(() => {});
+    api.getArpStatus().then(setArpStatus).catch(() => {});
     api
       .getRouterConfig()
       .then((cfg) => {
@@ -78,10 +89,30 @@ export const SettingsView: React.FC = () => {
 
     const interval = setInterval(() => {
       api.getDnsStats().then(setDnsStats).catch(() => {});
-    }, 5000);
+      api.getArpStatus().then(setArpStatus).catch(() => {});
+    }, 4000);
 
     return () => clearInterval(interval);
   }, []);
+
+  const handleLaunchDriver = async () => {
+    setIsLaunchingDriver(true);
+    try {
+      const res = await api.installArpDriver();
+      toast({
+        type: 'info',
+        title: 'Installer Launched',
+        description: res.message,
+      });
+      setTimeout(() => {
+        api.getArpStatus().then(setArpStatus).catch(() => {});
+      }, 4000);
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Setup Error', description: err.message });
+    } finally {
+      setIsLaunchingDriver(false);
+    }
+  };
 
   const handleTestRouter = async () => {
     setIsTesting(true);
@@ -162,6 +193,118 @@ export const SettingsView: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* 0. Autonomous SaaS Network Engine (Layer 2 ARP Injection) */}
+      <Card className="border-cyan-500/30 bg-gradient-to-br from-card via-card to-cyan-950/10 shadow-lg">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-md bg-cyan-500/10 text-cyan-400 flex items-center justify-center border border-cyan-500/20">
+                  <Zap className="h-4 w-4" />
+                </div>
+                <CardTitle className="text-base font-bold">Autonomous SaaS Network Engine</CardTitle>
+                {arpStatus?.driverStatus === 'ready' ? (
+                  <Badge variant="online" className="gap-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                    <CheckCircle2 className="h-3 w-3" />
+                    <span>L2 Driver Active</span>
+                  </Badge>
+                ) : (
+                  <Badge variant="warning" className="gap-1 bg-amber-500/10 text-amber-400 border-amber-500/30">
+                    <AlertTriangle className="h-3 w-3" />
+                    <span>Driver Setup Required</span>
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-foreground-muted mt-1 max-w-2xl">
+                Commercial SaaS Layer 2 packet injection engine. Directly pauses, throttles, and disconnects any client device on Wi-Fi without requiring router credentials or phone configuration.
+              </p>
+            </div>
+            <Badge variant="neutral" className="font-mono text-[11px] self-start sm:self-auto border-border">
+              Layer 2 ARP Engine
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="p-3.5 rounded-lg bg-secondary/40 border border-border/80 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div>
+              <span className="text-foreground-muted block text-[10px] uppercase font-semibold">
+                Autonomous Enforcement
+              </span>
+              <span className="font-semibold text-foreground flex items-center gap-1.5 mt-0.5">
+                {arpStatus?.driverStatus === 'ready' ? (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    100% Operational (Npcap NDIS)
+                  </>
+                ) : (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                    Pending 1-Click Driver Setup
+                  </>
+                )}
+              </span>
+            </div>
+            <div>
+              <span className="text-foreground-muted block text-[10px] uppercase font-semibold">
+                Active Hardware Cuts
+              </span>
+              <span className="font-mono font-semibold text-foreground mt-0.5 block">
+                {arpStatus?.activePauses?.length || 0} devices under L2 blackhole
+              </span>
+            </div>
+            <div>
+              <span className="text-foreground-muted block text-[10px] uppercase font-semibold">
+                Engine Executable
+              </span>
+              <span className="font-mono text-[11px] text-foreground-secondary mt-0.5 block truncate" title={arpStatus?.enginePath}>
+                SentinelArpEngine.exe
+              </span>
+            </div>
+          </div>
+
+          {arpStatus?.driverStatus !== 'ready' ? (
+            <div className="p-3.5 rounded-lg border border-amber-500/30 bg-amber-500/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <span>One-Time Kernel Driver Setup Required for Windows</span>
+                </div>
+                <p className="text-[11px] text-foreground-muted">
+                  Commercial network tools (NetCut, Fing Desktop, Wireshark) require Npcap to transmit Layer 2 ARP frames. Click below to launch setup.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={handleLaunchDriver}
+                  disabled={isLaunchingDriver}
+                  className="h-8 text-xs font-medium bg-cyan-600 hover:bg-cyan-500 text-white gap-1.5"
+                >
+                  <Zap className={cn("h-3.5 w-3.5", isLaunchingDriver && "animate-spin")} />
+                  {isLaunchingDriver ? 'Launching...' : '1-Click Driver Setup'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => api.getArpStatus().then(setArpStatus)}
+                  className="h-8 text-xs"
+                >
+                  <RotateCw className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-emerald-400 font-medium">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>Zero-touch SaaS mode is active. Internet pause, throttle, and kick execute natively at Layer 2.</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* 1. Physical Enforcement & Router Hardware Gateway */}
       <Card className="border-primary/30">
         <CardHeader>

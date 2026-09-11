@@ -111,3 +111,52 @@ export const getDnsGatewayStats = async (req: Request, res: Response): Promise<v
     res.status(500).json({ error: err.message });
   }
 };
+
+export const getSystemLogs = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 100;
+    const { systemLogger } = await import('../services/systemLogger.service.js');
+    res.json({
+      total: systemLogger.getRecentLogs(limit).length,
+      logs: systemLogger.getRecentLogs(limit),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const clearSystemLogs = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { systemLogger } = await import('../services/systemLogger.service.js');
+    systemLogger.clearLogs();
+    res.json({ success: true, message: 'Logs cleared.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const getArpEngineStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { arpEngineService } = await import('../services/arpEngine.service.js');
+    await arpEngineService.checkDriverStatus();
+    res.json(arpEngineService.getStatus());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const triggerNpcapInstaller = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { exec } = await import('child_process');
+    const installerPath = 'c:\\Users\\hp-new\\Desktop\\wifi-management\\drivers\\npcap-installer.exe';
+    exec(`explorer.exe "${installerPath}"`);
+    res.json({
+      success: true,
+      message: 'Npcap driver installer launched. Click "Yes" on the Windows permission prompt on your screen to complete one-time setup.',
+      path: installerPath,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+

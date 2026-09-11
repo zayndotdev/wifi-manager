@@ -38,8 +38,10 @@ import {
   Activity,
   Layers,
   ShieldAlert,
+  Terminal,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { SystemLoggerDrawer } from '../common/SystemLoggerDrawer';
 import { cn } from '../../lib/utils';
 
 export interface DeviceDetailViewProps {
@@ -68,6 +70,7 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
 
   const [directDevice, setDirectDevice] = React.useState<Device | null>(null);
   const [isFetchingDirect, setIsFetchingDirect] = React.useState(false);
+  const [isLoggerOpen, setIsLoggerOpen] = React.useState(false);
 
   const matchedDevice = devices.find((d) => d.id === deviceId);
   const device = matchedDevice || directDevice;
@@ -97,7 +100,7 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
     if (!device) return;
     try {
       setIsLoadingDomains(true);
-      const res = await api.getRecentDomains('all');
+      const res = await api.getRecentDomains('all', device.id);
       const filtered = (res?.domains || []).filter(
         (d) =>
           isUserFacingDomain(d.domain) &&
@@ -309,28 +312,32 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
         </Card>
       )}
 
-      {/* Paused Physical Enforcement Guidance Banner */}
+      {/* Paused Physical Enforcement Status Banner */}
       {isPaused && (
         <Card className="p-4 border-amber-500/30 bg-amber-500/10 shadow-subtle animate-fade-in">
-          <div className="flex items-start gap-3">
-            <div className="h-9 w-9 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
-              <ShieldAlert className="h-5 w-5" />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0">
+                <ShieldAlert className="h-5 w-5" />
+              </div>
+              <div className="text-xs">
+                <h4 className="font-semibold text-amber-700 dark:text-amber-300">
+                  Internet Paused — Physical Network Enforcement Active
+                </h4>
+                <p className="text-[11px] text-foreground-muted mt-0.5">
+                  Port 53 UDP Sinkhole is actively dropping domain resolution for <code>{device.ip}</code> and router MAC blocking is registered.
+                </p>
+              </div>
             </div>
-            <div className="text-xs space-y-1">
-              <h4 className="font-semibold text-amber-700 dark:text-amber-300">
-                Internet Paused — Active Enforcement Status
-              </h4>
-              <p className="text-[11px] text-foreground-muted leading-relaxed">
-                Active DNS Sinkhole (Port 53 UDP) is currently blocking all domain resolution for <code>{device.ip}</code> on this host.
-              </p>
-              <p className="text-[11px] text-foreground-muted leading-relaxed">
-                <strong>To complete 100% physical cutoff on mobile devices:</strong> Either enter your ZTE router admin password in{' '}
-                <Link to="/settings" className="underline font-semibold text-primary hover:text-primary-hover">
-                  Settings → Router Hardware
-                </Link>{' '}
-                to block its MAC address directly at the Wi-Fi chip, or set your router's DHCP DNS (or phone's Wi-Fi DNS) to <code>192.168.1.17</code>.
-              </p>
-            </div>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => setIsLoggerOpen(true)}
+              className="gap-1.5 font-mono text-xs text-amber-600 border-amber-300 dark:border-amber-800 dark:text-amber-400 shrink-0"
+            >
+              <Terminal className="h-3.5 w-3.5" />
+              <span>View Live Logs</span>
+            </Button>
           </div>
         </Card>
       )}
@@ -871,6 +878,9 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
           </Card>
         </div>
       )}
+
+      {/* Real-Time Diagnostic Terminal Drawer */}
+      <SystemLoggerDrawer isOpen={isLoggerOpen} onClose={() => setIsLoggerOpen(false)} />
     </div>
   );
 };

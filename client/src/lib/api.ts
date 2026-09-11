@@ -76,9 +76,9 @@ export const api = {
     request<{ action: string }>('/network/resume-all', { method: 'POST' }),
 
   // Traffic & Domains
-  getRecentDomains: (category: string = 'all') =>
+  getRecentDomains: (category: string = 'all', deviceId?: string) =>
     request<{ total: number; domains: import('../types/traffic').DomainEvent[] }>(
-      `/domains/recent?category=${category}`
+      `/domains/recent?category=${category}${deviceId ? `&deviceId=${encodeURIComponent(deviceId)}` : ''}`
     ),
   blockDomain: (domain: string) =>
     request<{ domain: string; status: string }>('/domains/block', {
@@ -130,4 +130,19 @@ export const api = {
       body: JSON.stringify(data),
     }),
   getDnsStats: () => request<any>('/system/dns/stats'),
+  getSystemLogs: (limit: number = 100) => request<{ total: number; logs: any[] }>(`/system/logs?limit=${limit}`),
+  clearSystemLogs: () => request<{ success: boolean; message: string }>('/system/logs', { method: 'DELETE' }),
+
+  // SaaS Autonomous Layer 2 ARP Engine
+  getArpStatus: () =>
+    request<{
+      available: boolean;
+      enginePath: string;
+      driverStatus: 'ready' | 'npcap_missing' | 'error';
+      activePauses: string[];
+    }>('/system/arp/status'),
+  installArpDriver: () =>
+    request<{ success: boolean; message: string; path: string }>('/system/arp/install-driver', {
+      method: 'POST',
+    }),
 };

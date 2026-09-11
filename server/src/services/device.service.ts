@@ -3,6 +3,8 @@ import { isConnectedToMongo } from '../config/database.js';
 import { realNetworkService } from './realNetwork.service.js';
 import { dnsGatewayService } from './dnsGateway.service.js';
 import { routerService } from './router.service.js';
+import { systemLogger } from './systemLogger.service.js';
+import { arpEngineService } from './arpEngine.service.js';
 
 class DeviceService {
   private memoryStore: Map<string, any> = new Map();
@@ -65,15 +67,21 @@ class DeviceService {
     return list.map((d) => {
       const mem = this.memoryStore.get(d.id);
       if (mem) {
-        const status = (mem.status === 'paused' || mem.status === 'blocked' || mem.status === 'throttled')
-          ? mem.status
-          : d.status;
+        // Admin overrides take precedence over transient ping reachability
+        let status = mem.status ?? d.status;
+        if (mem.status === 'paused' || d.status === 'paused') {
+          status = 'paused';
+        } else if (mem.status === 'blocked' || d.status === 'blocked') {
+          status = 'blocked';
+        } else if (d.status === 'offline' || mem.status === 'offline') {
+          status = 'offline';
+        }
         const isOffline = status === 'offline';
         return {
           ...d,
           status,
-          currentDownloadBps: isOffline ? 0 : (mem.currentDownloadBps ?? d.currentDownloadBps),
-          currentUploadBps: isOffline ? 0 : (mem.currentUploadBps ?? d.currentUploadBps),
+          currentDownloadBps: isOffline || status === 'paused' || status === 'blocked' ? 0 : (mem.currentDownloadBps ?? d.currentDownloadBps),
+          currentUploadBps: isOffline || status === 'paused' || status === 'blocked' ? 0 : (mem.currentUploadBps ?? d.currentUploadBps),
           todayBytesTotal: Math.max(d.todayBytesTotal || 0, mem.todayBytesTotal || 0),
           isThrottled: mem.isThrottled ?? d.isThrottled,
         };
@@ -169,17 +177,25 @@ class DeviceService {
       Object.assign(dev, patch);
       this.memoryStore.set(id, dev);
 
-      // 1. Enforce physical DNS Sinkhole on UDP Port 53
+      // 1. Enforce Autonomous Layer 2 ARP Blackhole (Zero router creds, Zero phone tampering)
+      if (dev.ip && dev.mac) {
+        const arpSuccess = await arpEngineService.pauseDevice(dev.ip, dev.mac);
+        if (arpSuccess) enforcement = 'autonomous_l2_arp_blackhole';
+      }
+
+      // 2. Enforce physical DNS Sinkhole on UDP Port 53
       if (dev.ip) {
         dnsGatewayService.pauseDevice(dev.ip);
       }
-      // 2. Enforce Router Hardware Access Control / MAC Filter
+
+      // 3. Fallback router hardware block if router configured
       if (dev.mac) {
         const routerRes = await routerService.blockMac(dev.mac);
-        if (routerRes.method === 'router_hardware_filter') {
+        if (routerRes.method === 'router_hardware_filter' || routerRes.method === 'zte_hardware_mac_filter') {
           enforcement = 'router_hardware_filter';
         }
       }
+      systemLogger.hardware('DEVICE', `Internet PAUSED for ${dev.nickname || dev.hostname || id} (IP: ${dev.ip}, MAC: ${dev.mac}). Enforcement: ${enforcement}`);
     }
     return { id, status: 'paused', pausedAt: new Date().toISOString(), enforcement };
   }
@@ -198,14 +214,21 @@ class DeviceService {
       Object.assign(dev, patch);
       this.memoryStore.set(id, dev);
 
-      // 1. Restore physical DNS access
+      // 1. Restore Layer 2 ARP table (Restore true Gateway MAC)
+      if (dev.ip && dev.mac) {
+        await arpEngineService.resumeDevice(dev.ip, dev.mac);
+      }
+
+      // 2. Restore physical DNS access
       if (dev.ip) {
         dnsGatewayService.resumeDevice(dev.ip);
       }
-      // 2. Remove Router Hardware Block
+
+      // 3. Remove Router Hardware Block
       if (dev.mac) {
         await routerService.unblockMac(dev.mac);
       }
+      systemLogger.hardware('DEVICE', `Internet RESUMED for ${dev.nickname || dev.hostname || id} (IP: ${dev.ip}, MAC: ${dev.mac}).`);
     }
     return { id, status: 'active', resumedAt: new Date().toISOString() };
   }
@@ -221,7 +244,10 @@ class DeviceService {
     }
     this.memoryStore.delete(id);
 
-    // Physically kick device by forcing disassociation frame via router cycle & transient sinkhole
+    // Autonomous Layer 2 ARP deauth burst + router disassociation cycle
+    if (dev?.ip && dev?.mac) {
+      await arpEngineService.kickDevice(dev.ip, dev.mac);
+    }
     if (dev?.mac) {
       await routerService.kickStation(dev.mac);
     }
@@ -229,6 +255,7 @@ class DeviceService {
       dnsGatewayService.pauseDevice(dev.ip);
       setTimeout(() => dnsGatewayService.resumeDevice(dev.ip), 30000);
     }
+    systemLogger.hardware('DEVICE', `DISCONNECTED / KICKED station ${dev?.nickname || id} (MAC: ${dev?.mac}). WLAN frame disassociated.`);
 
     return { id, mac: dev?.mac, action: 'deauthenticated', timestamp: new Date().toISOString() };
   }
@@ -247,8 +274,10 @@ class DeviceService {
       Object.assign(dev, patch);
       this.memoryStore.set(id, dev);
 
+      if (dev.ip && dev.mac) await arpEngineService.pauseDevice(dev.ip, dev.mac);
       if (dev.ip) dnsGatewayService.pauseDevice(dev.ip);
       if (dev.mac) await routerService.blockMac(dev.mac);
+      systemLogger.hardware('DEVICE', `Permanent MAC BLACKLIST applied to ${dev.nickname || id} (MAC: ${dev.mac}). Notes: ${notes || 'None'}`);
     }
     return { id, status: 'blocked', notes, blockedAt: new Date().toISOString() };
   }
@@ -267,6 +296,7 @@ class DeviceService {
       Object.assign(dev, patch);
       this.memoryStore.set(id, dev);
 
+      if (dev.ip && dev.mac) await arpEngineService.resumeDevice(dev.ip, dev.mac);
       if (dev.ip) dnsGatewayService.resumeDevice(dev.ip);
       if (dev.mac) await routerService.unblockMac(dev.mac);
     }
@@ -299,6 +329,7 @@ class DeviceService {
       Object.assign(dev, patch);
       this.memoryStore.set(id, dev);
     }
+    systemLogger.hardware('THROTTLE', `Speed limit applied to ${dev?.nickname || id}: ${downloadLimitKbps} Kbps Down / ${uploadLimitKbps} Kbps Up.`);
     return { id, isThrottled: true, throttleLimits: { downloadLimitKbps, uploadLimitKbps } };
   }
 
@@ -316,30 +347,85 @@ class DeviceService {
       Object.assign(dev, patch);
       this.memoryStore.set(id, dev);
     }
+    systemLogger.hardware('THROTTLE', `Speed limit removed for ${dev?.nickname || id}. Full bandwidth restored.`);
     return { id, isThrottled: false, message: 'Throttle removed' };
   }
 
   public async pauseAll(excludeWhitelisted: boolean = true): Promise<any> {
     let pausedCount = 0;
+    const pausedIds: string[] = [];
+
     for (const [id, dev] of this.memoryStore.entries()) {
       if (excludeWhitelisted && dev.category === 'iot') continue; // IoT devices exempt
       if (dev.status === 'active') {
         dev.status = 'paused';
         dev.currentDownloadBps = 0;
         dev.currentUploadBps = 0;
+        pausedIds.push(id);
         pausedCount++;
+
+        // 1. Layer 2 ARP Blackhole
+        if (dev.ip && dev.mac) {
+          arpEngineService.pauseDevice(dev.ip, dev.mac).catch(() => {});
+        }
+        // 2. DNS Sinkhole
+        if (dev.ip) {
+          dnsGatewayService.pauseDevice(dev.ip);
+        }
       }
     }
+
+    if (isConnectedToMongo && pausedIds.length > 0) {
+      try {
+        await DeviceModel.updateMany(
+          { id: { $in: pausedIds } },
+          { $set: { status: 'paused', currentDownloadBps: 0, currentUploadBps: 0 } }
+        );
+      } catch (err: any) {
+        console.error('[DeviceService] pauseAll Mongo update failed:', err.message);
+      }
+    }
+
+    systemLogger.hardware('DEVICE', `Global Network Pause engaged. ${pausedCount} devices paused.`);
     return { action: 'pause_all', pausedDevicesCount: pausedCount };
   }
 
   public async resumeAll(): Promise<any> {
+    let resumedCount = 0;
+
     for (const [id, dev] of this.memoryStore.entries()) {
       if (dev.status === 'paused') {
         dev.status = 'active';
+        resumedCount++;
+
+        // 1. Restore Layer 2 ARP table
+        if (dev.ip && dev.mac) {
+          arpEngineService.resumeDevice(dev.ip, dev.mac).catch(() => {});
+        }
+        // 2. Restore DNS resolution
+        if (dev.ip) {
+          dnsGatewayService.resumeDevice(dev.ip);
+        }
+        // 3. Unblock router hardware if blocked
+        if (dev.mac) {
+          routerService.unblockMac(dev.mac).catch(() => {});
+        }
       }
     }
-    return { action: 'resume_all' };
+
+    if (isConnectedToMongo) {
+      try {
+        await DeviceModel.updateMany(
+          { status: 'paused' },
+          { $set: { status: 'active' } }
+        );
+      } catch (err: any) {
+        console.error('[DeviceService] resumeAll Mongo update failed:', err.message);
+      }
+    }
+
+    systemLogger.hardware('DEVICE', `Global Network Resumed. All paused devices restored to active.`);
+    return { action: 'resume_all', resumedDevicesCount: resumedCount };
   }
 
   private lastMongoBytesFlush = 0;

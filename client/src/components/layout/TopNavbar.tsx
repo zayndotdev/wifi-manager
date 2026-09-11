@@ -1,10 +1,11 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wifi, ArrowDown, ArrowUp, Pause, Play, Bell, Shield } from 'lucide-react';
+import { Wifi, ArrowDown, ArrowUp, Pause, Play, Bell, Shield, Terminal } from 'lucide-react';
 import { useWebSocket } from '../../context/WebSocketContext';
 import { useDevices } from '../../context/DeviceContext';
 import { formatSpeed } from '../../lib/formatters';
 import { ThemePicker } from '../common/ThemePicker';
+import { SystemLoggerDrawer } from '../common/SystemLoggerDrawer';
 import { Button } from '../ui/Button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/Tooltip';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/Popover';
@@ -18,12 +19,13 @@ export const TopNavbar: React.FC = () => {
   const { devices, pauseAllDevices, resumeAllDevices } = useDevices();
   const [alerts, setAlerts] = React.useState<SecurityAlert[]>([]);
   const [isAlertsOpen, setIsAlertsOpen] = React.useState(false);
+  const [isLoggerOpen, setIsLoggerOpen] = React.useState(false);
 
   const activeCount = devices.filter((d) => d.status === 'active').length;
   const offlineCount = devices.filter((d) => d.status === 'offline').length;
   const pausedCount = devices.filter((d) => d.status === 'paused').length;
   const totalCount = devices.length;
-  const isAnyPaused = pausedCount > 0;
+  const isAllPaused = totalCount > 0 && activeCount === 0 && pausedCount > 0;
 
   // Poll alerts
   React.useEffect(() => {
@@ -57,14 +59,16 @@ export const TopNavbar: React.FC = () => {
             tabIndex={0}
             onKeyDown={(e) => e.key === 'Enter' && navigate('/')}
           >
-            <div className="h-7 w-7 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-subtle">
+            <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-primary text-primary-foreground shadow-sm">
               <Wifi className="h-4 w-4" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-bold tracking-tight text-foreground uppercase">
-                Wi-Fi Sentinel
+              <span className="font-bold text-sm leading-none tracking-tight text-foreground">
+                WI-FI SENTINEL
               </span>
-              <span className="text-[10px] text-foreground-muted -mt-0.5">Enterprise Gateway</span>
+              <span className="text-[10px] text-foreground-muted font-mono leading-tight mt-0.5">
+                Enterprise Gateway
+              </span>
             </div>
           </div>
 
@@ -128,11 +132,20 @@ export const TopNavbar: React.FC = () => {
                     </div>
                   </>
                 )}
+                {pausedCount > 0 && (
+                  <>
+                    <span className="text-border">|</span>
+                    <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      <span>{pausedCount} Paused</span>
+                    </div>
+                  </>
+                )}
                 <span className="text-foreground-muted text-[11px]">({totalCount} Total)</span>
               </div>
             </TooltipTrigger>
             <TooltipContent>
-              <span>{activeCount} live reachable devices, {offlineCount} offline/disconnected from {totalCount} discovered</span>
+              <span>{activeCount} live reachable devices, {offlineCount} offline, {pausedCount} paused from {totalCount} discovered</span>
             </TooltipContent>
           </Tooltip>
 
@@ -140,17 +153,17 @@ export const TopNavbar: React.FC = () => {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant={isAnyPaused ? 'destructive' : 'secondary'}
+                variant={isAllPaused ? 'destructive' : 'secondary'}
                 size="sm"
                 className="gap-1.5 text-xs"
-                onClick={isAnyPaused ? resumeAllDevices : pauseAllDevices}
+                onClick={isAllPaused ? resumeAllDevices : pauseAllDevices}
               >
-                {isAnyPaused ? <Play className="h-3 w-3 fill-current" /> : <Pause className="h-3 w-3" />}
-                <span className="hidden lg:inline">{isAnyPaused ? 'Resume Network' : 'Pause All'}</span>
+                {isAllPaused ? <Play className="h-3 w-3 fill-current" /> : <Pause className="h-3 w-3" />}
+                <span className="hidden lg:inline">{isAllPaused ? 'Resume All' : 'Pause All'}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <span>{isAnyPaused ? 'Restore internet to paused devices' : 'Freeze WAN internet on all non-exempt devices'}</span>
+              <span>{isAllPaused ? 'Restore internet to all paused devices' : 'Freeze WAN internet on all non-exempt devices'}</span>
             </TooltipContent>
           </Tooltip>
 
@@ -223,10 +236,31 @@ export const TopNavbar: React.FC = () => {
             </PopoverContent>
           </Popover>
 
+          {/* Real-Time Hardware & Diagnostic Terminal Drawer Toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsLoggerOpen(true)}
+                className="gap-1.5 text-xs text-foreground-secondary hover:text-foreground font-mono"
+              >
+                <Terminal className="h-3.5 w-3.5 text-primary" />
+                <span className="hidden sm:inline">Live Logs</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span>Open real-time system, hardware, and network diagnostic terminal</span>
+            </TooltipContent>
+          </Tooltip>
+
           {/* Theme Palette Switcher */}
           <ThemePicker />
         </div>
       </div>
+
+      {/* Global Real-Time Diagnostics Console Drawer */}
+      <SystemLoggerDrawer isOpen={isLoggerOpen} onClose={() => setIsLoggerOpen(false)} />
     </header>
   );
 };

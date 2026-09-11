@@ -3,6 +3,9 @@ import { exec, execSync, execFileSync } from 'child_process';
 import dns from 'dns';
 import dgram from 'dgram';
 import os from 'os';
+import fs from 'fs';
+import path from 'path';
+import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'util';
 import { createRequire } from 'module';
 import { DeviceModel, IDevice } from '../models/Device.model.js';
@@ -48,6 +51,9 @@ class RealNetworkService {
   private lastRxBytes: number = 0;
   private lastTxBytes: number = 0;
   private lastBandwidthTime: number = 0;
+  private browserHistoryMtimes: Map<string, number> = new Map();
+  private cachedBrowserDomains: Map<string, string[]> = new Map();
+  private cachedBrowserVisits: Map<string, Array<{ domain: string; url: string; title: string; timestamp: Date }>> = new Map();
 
   // 1. Get Live Wi-Fi interface details
   public getWifiInterfaceInfo(): RealWifiInfo {
@@ -454,6 +460,7 @@ class RealNetworkService {
       deviceMap.set(d.mac, {
         ...(ex || {}),
         ...d,
+        status: ex?.status || d.status,
         nickname: (ex && ex.nickname && !/^Device-\d+$/i.test(ex.nickname)) ? ex.nickname : d.nickname,
       });
     }
@@ -840,7 +847,136 @@ class RealNetworkService {
       // Ignore netstat errors
     }
 
+    // Step C: Incorporate active user browser sessions (Chrome, Edge, Brave across all profiles)
+    // Directly overcomes DNS-over-HTTPS (DoH) and CDN reverse-DNS PTR omissions
+    try {
+      const browserVisits = this.getRealBrowserActivity();
+      for (const visit of browserVisits) {
+        if (!this.isSystemNoiseDomain(visit.domain)) {
+          domains.add(visit.domain);
+        }
+      }
+    } catch {
+      // Ignore browser read errors
+    }
+
     return Array.from(domains).slice(0, 100);
+  }
+
+  // 8. Extract real active browsing destinations directly from local browser databases
+  public getRealBrowserActivity(): Array<{ domain: string; url: string; title: string; timestamp: Date }> {
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    const browserBasePaths = [
+      path.join(localAppData, 'Google', 'Chrome', 'User Data'),
+      path.join(localAppData, 'Microsoft', 'Edge', 'User Data'),
+      path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'User Data')
+    ];
+
+    const allVisits: Array<{ domain: string; url: string; title: string; timestamp: Date }> = [];
+
+    for (const basePath of browserBasePaths) {
+      if (!fs.existsSync(basePath)) continue;
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(basePath, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      for (const ent of entries) {
+        if (!ent.isDirectory()) continue;
+        if (ent.name !== 'Default' && !ent.name.startsWith('Profile ')) continue;
+
+        const historyPath = path.join(basePath, ent.name, 'History');
+        if (!fs.existsSync(historyPath)) continue;
+
+        try {
+          const stat = fs.statSync(historyPath);
+          const lastMtime = this.browserHistoryMtimes.get(historyPath) || 0;
+
+          // Only open and query SQLite when the History database has actually been modified
+          if (stat.mtimeMs > lastMtime || !this.cachedBrowserVisits.has(historyPath)) {
+            this.browserHistoryMtimes.set(historyPath, stat.mtimeMs);
+
+            const tempFile = path.join(
+              os.tmpdir(),
+              `sentinel_hist_${ent.name.replace(/\s+/g, '_')}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.db`
+            );
+
+            try {
+              fs.copyFileSync(historyPath, tempFile);
+              const db = new DatabaseSync(tempFile, { open: true, readOnly: true });
+              const rows = db.prepare(
+                'SELECT url, title, CAST(last_visit_time AS TEXT) as t FROM urls ORDER BY last_visit_time DESC LIMIT 30'
+              ).all() as Array<{ url: string; title: string; t: string }>;
+              db.close();
+
+              const profileVisits: Array<{ domain: string; url: string; title: string; timestamp: Date }> = [];
+              const profileDomains: string[] = [];
+
+              for (const row of rows) {
+                if (!row.url) continue;
+                try {
+                  const parsed = new URL(row.url);
+                  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') continue;
+                  let host = parsed.hostname.toLowerCase().trim();
+                  if (host.startsWith('www.')) host = host.substring(4);
+                  if (
+                    !host ||
+                    host.includes('localhost') ||
+                    host.startsWith('127.') ||
+                    host.startsWith('192.168.') ||
+                    host.startsWith('10.') ||
+                    this.isSystemNoiseDomain(host)
+                  ) {
+                    continue;
+                  }
+
+                  let visitDate = new Date();
+                  if (row.t) {
+                    try {
+                      const tMicro = BigInt(row.t);
+                      const unixMs = Number(tMicro / 1000n - 11644473600000n);
+                      if (!isNaN(unixMs) && unixMs > 0) {
+                        visitDate = new Date(unixMs);
+                      }
+                    } catch {}
+                  }
+
+                  profileVisits.push({
+                    domain: host,
+                    url: row.url,
+                    title: row.title || host,
+                    timestamp: visitDate,
+                  });
+
+                  if (!profileDomains.includes(host)) {
+                    profileDomains.push(host);
+                  }
+                } catch {}
+              }
+
+              this.cachedBrowserVisits.set(historyPath, profileVisits);
+              this.cachedBrowserDomains.set(historyPath, profileDomains);
+            } finally {
+              try {
+                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+              } catch {}
+            }
+          }
+
+          const cached = this.cachedBrowserVisits.get(historyPath);
+          if (cached) {
+            allVisits.push(...cached);
+          }
+        } catch {
+          // Ignore transient file lock or read glitches
+        }
+      }
+    }
+
+    allVisits.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    return allVisits;
   }
 }
 

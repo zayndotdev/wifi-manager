@@ -6,6 +6,7 @@ import { telemetryBroadcaster } from './websocket/telemetryServer.js';
 import { telemetryService } from './services/telemetry.service.js';
 import { dnsGatewayService } from './services/dnsGateway.service.js';
 
+// Wi-Fi Sentinel Gateway Engine Server
 async function bootstrap() {
   console.log('====================================================');
   console.log('       WI-FI SENTINEL — GATEWAY ENGINE SERVER       ');

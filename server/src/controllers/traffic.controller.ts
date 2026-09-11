@@ -4,7 +4,8 @@ import { trafficService } from '../services/traffic.service.js';
 export const getRecentDomains = async (req: Request, res: Response): Promise<void> => {
   try {
     const category = req.query.category as string;
-    const result = await trafficService.getRecentDomains(category);
+    const deviceId = req.query.deviceId as string;
+    const result = await trafficService.getRecentDomains(category, deviceId);
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

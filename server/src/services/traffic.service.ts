@@ -3,7 +3,7 @@ import { DomainLogModel, IDomainLog } from '../models/DomainLog.model.js';
 import { isConnectedToMongo } from '../config/database.js';
 
 export const SYSTEM_NOISE_REGEX =
-  /(mongodb\.(net|com)|compute\.amazonaws\.com|\.amazonaws\.com|\.cloudfront\.net|azurefd\.net|azureedge\.net|trafficmanager\.net|cloudapp\.azure\.com|cloudapp\.net|core\.windows\.net|msedge\.net|office\.net|cloud\.microsoft|skype\.com|prod\.do\.dsp\.mp\.microsoft\.com|events\.data\.microsoft\.com|delivery\.mp\.microsoft\.com|delivery\.microsoft\.com|trafficshaping|windowsupdate\.com|storequality\.microsoft\.com|data\.microsoft\.com|exp-tas\.com|iris\.microsoft\.com|cwsapp|update\.microsoft\.com|wdcp\.microsoft\.com|displaycatalog|bigcatalog|\.commerce\.microsoft\.com|api\.cdp\.microsoft\.com|storeedge|oneocsp\.microsoft\.com|teams\.microsoft\.com|teams\.office\.com|outlook\.office365\.com|oneclient\.sfx\.ms|login\.live\.com|identity\.live\.com|g\.live\.com|\.live\.com|login\.microsoftonline\.com|assets\.msn\.com|\.msn\.com|smartscreen|wns\.windows\.com|time\.windows\.com|notify\.windows\.com|msftncsi\.com|msftconnecttest\.com|pki-goog|googleusercontent\.com|googleapis\.com|gstatic\.com|gvt1\.com|gvt2\.com|1e100\.net|\.goog$|\.goog\/|\.pki\.goog|cloudcode-pa|cdn\.whatsapp\.net|\.whatsapp\.net|wisprflow|ip-api\.com|registry\.npmjs\.org|schemastore|freedownloadmanager\.org|sentry\.io|bugsnag\.com|crashlytics\.com|segment\.io|\.akamaiedge\.net|\.edgekey\.net|\.edgesuite\.net|\.akadns\.net|\.akamai\.net|\.akamaized\.net|fastly\.net|gcdn\.co|digicert\.com|msidentity\.com|ecs\.office\.com|tm-\d+\.office\.com|svc\..*\.office\.com|\.local$|\.arpa$|\.internal$|\.lan$)/i;
+  /(mongodb\.(net|com)|compute\.amazonaws\.com|\.amazonaws\.com|\.cloudfront\.net|azurefd\.net|azureedge\.net|trafficmanager\.net|cloudapp\.azure\.com|cloudapp\.net|core\.windows\.net|msedge\.net|office\.net|cloud\.microsoft|skype\.com|prod\.do\.dsp\.mp\.microsoft\.com|events\.data\.microsoft\.com|delivery\.mp\.microsoft\.com|delivery\.microsoft\.com|trafficshaping|windowsupdate\.com|storequality\.microsoft\.com|data\.microsoft\.com|exp-tas\.com|iris\.microsoft\.com|cwsapp|update\.microsoft\.com|wdcp\.microsoft\.com|displaycatalog|bigcatalog|\.commerce\.microsoft\.com|api\.cdp\.microsoft\.com|storeedge|oneocsp\.microsoft\.com|telecommandsvc|teams\.microsoft\.com|teams\.office\.com|outlook\.office365\.com|oneclient\.sfx\.ms|login\.live\.com|identity\.live\.com|g\.live\.com|\.live\.com|login\.microsoftonline\.com|assets\.msn\.com|\.msn\.com|smartscreen|wns\.windows\.com|time\.windows\.com|notify\.windows\.com|msftncsi\.com|msftconnecttest\.com|pki-goog|googleusercontent\.com|googleapis\.com|gstatic\.com|gvt1\.com|gvt2\.com|1e100\.net|\.goog$|\.goog\/|\.pki\.goog|cloudcode-pa|cdn\.whatsapp\.net|\.whatsapp\.net|wisprflow|ip-api\.com|registry\.npmjs\.org|schemastore|freedownloadmanager\.org|sentry\.io|bugsnag\.com|crashlytics\.com|segment\.io|\.akamaiedge\.net|\.edgekey\.net|\.edgesuite\.net|\.akadns\.net|\.akamai\.net|\.akamaized\.net|fastly\.net|gcdn\.co|digicert\.com|msidentity\.com|lencr\.org|sectigo\.com|ecs\.office\.com|tm-\d+\.office\.com|svc\..*\.office\.com|\.local$|\.arpa$|\.internal$|\.lan$)/i;
 
 class TrafficService {
   private domainList: any[];
@@ -55,39 +55,38 @@ class TrafficService {
     if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
       try {
         await this.purgeHistoricalNoise();
-
-        const docs = await DomainLogModel.find({ domain: { $not: SYSTEM_NOISE_REGEX } })
-          .sort({ timestamp: -1 })
-          .limit(100)
-          .lean();
-        if (docs.length > 0) {
-          this.domainList = docs;
-        }
-      } catch {
-        // Fallback
+        const docs = await DomainLogModel.find().sort({ timestamp: -1 }).limit(150).lean();
+        this.domainList = docs.filter((d) => !SYSTEM_NOISE_REGEX.test(d.domain)).slice(0, 100);
+      } catch (err: any) {
+        console.error('[TrafficService] loadFromMongo error:', err.message);
       }
     }
   }
 
-  public async getRecentDomains(category?: string): Promise<{ total: number; domains: any[] }> {
+  public async getRecentDomains(category?: string, deviceId?: string): Promise<{ total: number; domains: any[] }> {
     if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
       try {
-        const query: any = { domain: { $not: SYSTEM_NOISE_REGEX } };
+        const query: any = {};
         if (category && category !== 'all') {
           query.category = category;
         }
-        const docs = await DomainLogModel.find(query).sort({ timestamp: -1 }).limit(100).lean();
-        if (docs.length > 0) {
-          return { total: docs.length, domains: docs };
+        if (deviceId) {
+          query.deviceId = deviceId;
         }
-      } catch {
-        // Fallback
+        const docs = await DomainLogModel.find(query).sort({ timestamp: -1 }).limit(150).lean();
+        const clean = docs.filter((d) => !SYSTEM_NOISE_REGEX.test(d.domain)).slice(0, 100);
+        return { total: clean.length, domains: clean };
+      } catch (err: any) {
+        console.error('[TrafficService] getRecentDomains error:', err.message);
       }
     }
 
     let result = this.domainList.filter((d) => !SYSTEM_NOISE_REGEX.test(d.domain));
     if (category && category !== 'all') {
       result = result.filter((d) => d.category === category);
+    }
+    if (deviceId) {
+      result = result.filter((d) => d.deviceId === deviceId);
     }
     return {
       total: result.length,

@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
+import { systemLogger } from '../services/systemLogger.service.js';
 
 class TelemetryBroadcaster {
   private wss: WebSocketServer | null = null;
@@ -7,6 +8,11 @@ class TelemetryBroadcaster {
 
   public initialize(server: Server) {
     this.wss = new WebSocketServer({ server, path: '/ws/telemetry' });
+
+    // Register broadcaster with systemLogger
+    systemLogger.setBroadcaster((log) => {
+      this.broadcast('system_log', { log });
+    });
 
     this.wss.on('connection', (ws: WebSocket) => {
       this.clients.add(ws);
@@ -17,6 +23,14 @@ class TelemetryBroadcaster {
           type: 'connection_ack',
           timestamp: Date.now(),
           status: 'connected',
+        })
+      );
+
+      // Send recent system logs to client immediately
+      ws.send(
+        JSON.stringify({
+          type: 'recent_logs',
+          logs: systemLogger.getRecentLogs(60),
         })
       );
 
