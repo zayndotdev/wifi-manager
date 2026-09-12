@@ -565,16 +565,20 @@ class RealNetworkService {
         todayBytesTotal: d.todayBytesTotal || (d.isHost ? 18000000 : isAlive ? 4000000 : 0),
       };
 
-      if (mongoose.connection.readyState === 1 || isConnectedToMongo) {
-        const doc = await DeviceModel.findOneAndUpdate(
-          { mac: d.mac },
-          {
-            $set: updateData,
-            $setOnInsert: setOnInsert,
-          },
-          { upsert: true, new: true }
-        );
-        resultDevices.push(doc as IDevice);
+      if (mongoose.connection.readyState === 1 && isConnectedToMongo) {
+        try {
+          const doc = await DeviceModel.findOneAndUpdate(
+            { mac: d.mac },
+            {
+              $set: updateData,
+              $setOnInsert: setOnInsert,
+            },
+            { upsert: true, new: true }
+          );
+          if (doc) resultDevices.push(doc as IDevice);
+        } catch {
+          // Skip transient socket reset during background rescan
+        }
       }
     }
 

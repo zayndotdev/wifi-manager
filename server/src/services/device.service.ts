@@ -32,8 +32,8 @@ class DeviceService {
         this.memoryStore.set(obj.id, obj);
       }
       return await this.getAll();
-    } catch (err) {
-      console.error('[DeviceService] Rescan failed:', err);
+    } catch (err: any) {
+      console.warn('[DeviceService] Rescan database sync deferred (using memory cache):', err?.message || err);
       return Array.from(this.memoryStore.values());
     }
   }
