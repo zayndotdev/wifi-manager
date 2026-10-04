@@ -22,6 +22,11 @@ interface DeviceContextType {
   removeThrottle: (id: string) => Promise<void>;
   pauseAllDevices: () => Promise<void>;
   resumeAllDevices: () => Promise<void>;
+  probeDevice: (id: string) => Promise<any>;
+  probeAllDevices: () => Promise<void>;
+  throttleUnknownDevices: (downloadLimitKbps?: number, uploadLimitKbps?: number) => Promise<void>;
+  pauseUnknownDevices: () => Promise<void>;
+  resumeUnknownDevices: () => Promise<void>;
   isScanning: boolean;
   scanNetwork: () => Promise<void>;
 }
@@ -363,6 +368,81 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const probeDevice = async (id: string) => {
+    try {
+      toast({ type: 'info', title: 'Deep Forensics Probe', description: 'Probing open ports, banners, and network signatures...' });
+      const res = await api.probeDevice(id);
+      if (res.device) {
+        setDevices((prev) => prev.map((d) => (d.id === id ? res.device : d)));
+        if (selectedDevice?.id === id) setSelectedDevice(res.device);
+      }
+      toast({
+        type: 'success',
+        title: 'Forensics Probe Complete',
+        description: `Identified: ${res.fingerprint?.brand || 'Device'} (${res.fingerprint?.os || 'Standard OS'})`,
+      });
+      return res.fingerprint;
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Probe Failed', description: err.message });
+      return null;
+    }
+  };
+
+  const probeAllDevices = async () => {
+    try {
+      toast({ type: 'info', title: 'Deep Forensics Scan', description: 'Probing all network devices for brands, models, and leaks...' });
+      const res = await api.probeAllDevices();
+      if (res.devices) {
+        setDevices(res.devices);
+      }
+      toast({ type: 'success', title: 'Deep Scan Finished', description: `Probed ${res.probedCount} devices.` });
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Deep Scan Failed', description: err.message });
+    }
+  };
+
+  const throttleUnknownDevices = async (downloadLimitKbps = 512, uploadLimitKbps = 128) => {
+    try {
+      const res = await api.throttleUnknownDevices(downloadLimitKbps, uploadLimitKbps);
+      toast({
+        type: 'warning',
+        title: 'Anti-Leech Guard Engaged',
+        description: `Throttled ${res.count} unknown devices to ${downloadLimitKbps}k down / ${uploadLimitKbps}k up.`,
+      });
+      await refreshDevices();
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Guard Failed', description: err.message });
+    }
+  };
+
+  const pauseUnknownDevices = async () => {
+    try {
+      const res = await api.pauseUnknownDevices();
+      toast({
+        type: 'error',
+        title: 'Anti-Leech Freeze Engaged',
+        description: `Internet frozen for ${res.count} unknown/randomized devices.`,
+      });
+      await refreshDevices();
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Freeze Failed', description: err.message });
+    }
+  };
+
+  const resumeUnknownDevices = async () => {
+    try {
+      const res = await api.resumeUnknownDevices();
+      toast({
+        type: 'success',
+        title: 'Anti-Leech Freeze Lifted',
+        description: `Restored internet access for ${res.count} devices.`,
+      });
+      await refreshDevices();
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Resume Failed', description: err.message });
+    }
+  };
+
   return (
     <DeviceContext.Provider
       value={{
@@ -383,6 +463,11 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         removeThrottle,
         pauseAllDevices,
         resumeAllDevices,
+        probeDevice,
+        probeAllDevices,
+        throttleUnknownDevices,
+        pauseUnknownDevices,
+        resumeUnknownDevices,
         isScanning,
         scanNetwork,
       }}

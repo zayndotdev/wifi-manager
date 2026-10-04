@@ -4,6 +4,7 @@ import { trafficService } from './traffic.service.js';
 import { telemetryBroadcaster } from '../websocket/telemetryServer.js';
 import { systemLogger } from './systemLogger.service.js';
 import { deviceService } from './device.service.js';
+import { deviceFingerprintService } from './deviceFingerprint.service.js';
 
 export interface DnsSinkholeStats {
   totalQueries: number;
@@ -129,12 +130,29 @@ class DnsGatewayService {
     const qName = (question.name || '').toLowerCase().trim();
     const qType = question.type || 'A';
 
+    // Passive Device Fingerprinting: Record domain query to identify manufacturer & apps
+    if (qName) {
+      deviceFingerprintService.recordDnsQuery(clientIp, qName);
+    }
+
     const isClientPaused = this.pausedIps.has(clientIp);
     const isDomainBlocked = this.blockedDomains.has(qName);
 
     // Resolve matching device profile
     const allDevs = (deviceService as any)['memoryStore'] ? Array.from((deviceService as any)['memoryStore'].values()) : [];
     const targetDev: any = allDevs.find((d: any) => d.ip === clientIp);
+    if (targetDev) {
+      const fp = deviceFingerprintService.getFingerprint(clientIp);
+      if (fp) {
+        targetDev.fingerprint = fp;
+        if (targetDev.isRandomizedMac && fp.brand) {
+          targetDev.vendor = `${fp.brand} (${fp.model || 'Device'})`;
+          if (targetDev.nickname?.startsWith('Private Smartphone')) {
+            targetDev.nickname = `${fp.brand} ${fp.model || 'Phone'} (.${clientIp.split('.')[3]})`;
+          }
+        }
+      }
+    }
     const resolvedDeviceId = targetDev ? targetDev.id : `ip_${clientIp.replace(/\./g, '_')}`;
     const resolvedDeviceName = targetDev ? (targetDev.nickname || targetDev.hostname) : clientIp;
 
@@ -177,6 +195,7 @@ class DnsGatewayService {
           category: isClientPaused ? 'general' : 'ad_tracker',
           deviceId: resolvedDeviceId,
           deviceNickname: isClientPaused ? `Paused Client (${resolvedDeviceName})` : resolvedDeviceName,
+          ip: clientIp,
           timestamp: new Date(),
           status: 'blocked',
           queryCountToday: 1,
@@ -214,6 +233,7 @@ class DnsGatewayService {
             category: 'general',
             deviceId: resolvedDeviceId,
             deviceNickname: resolvedDeviceName,
+            ip: clientIp,
             timestamp: new Date(),
             status: 'allowed',
             queryCountToday: 1,

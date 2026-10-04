@@ -32,6 +32,17 @@ export interface IDevice extends Document {
     uploadLimitKbps: number;
   };
   bedtimeScheduleId?: string;
+  fingerprint?: {
+    os?: string;
+    brand?: string;
+    model?: string;
+    trafficProfile?: string;
+    leakedHost?: string;
+    evidence?: string[];
+    openPorts?: number[];
+    banner?: string;
+    lastProbedAt?: string;
+  };
 }
 
 export const DeviceSchema = new Schema<IDevice>(
@@ -80,6 +91,7 @@ export const DeviceSchema = new Schema<IDevice>(
       uploadLimitKbps: { type: Number },
     },
     bedtimeScheduleId: { type: String },
+    fingerprint: { type: Schema.Types.Mixed },
   },
   {
     timestamps: true,

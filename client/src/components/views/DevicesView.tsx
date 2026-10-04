@@ -33,8 +33,13 @@ import {
   ExternalLink,
   WifiOff,
   Radio,
+  Download,
+  Shield,
+  ShieldAlert,
+  Cpu,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { exportDevicesToCsv, exportDevicesToJson } from '../../lib/exportUtils';
 
 export interface DevicesViewProps {
   onSelectDevice: (deviceId: string) => void;
@@ -49,16 +54,42 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
   onOpenKickModal,
   onOpenFullDetails,
 }) => {
-  const { devices, pauseDevice, resumeDevice, blockDevice, updateNickname, isScanning, scanNetwork } = useDevices();
+  const {
+    devices,
+    pauseDevice,
+    resumeDevice,
+    blockDevice,
+    updateNickname,
+    isScanning,
+    scanNetwork,
+    probeDevice,
+    probeAllDevices,
+    throttleUnknownDevices,
+    pauseUnknownDevices,
+    resumeUnknownDevices,
+  } = useDevices();
 
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<string>('all');
   const [viewMode, setViewMode] = React.useState<'grid' | 'table'>('grid');
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editNameValue, setEditNameValue] = React.useState('');
+  const [isProbingAll, setIsProbingAll] = React.useState(false);
 
   const activeCount = devices.filter((d) => d.status === 'active').length;
   const offlineCount = devices.filter((d) => d.status === 'offline').length;
+  const unknownCount = devices.filter(
+    (d) => (d.isRandomizedMac || d.category === 'unknown' || d.vendor?.includes('Private')) && !d.mac.startsWith('00:00')
+  ).length;
+  const throttledUnknownCount = devices.filter(
+    (d) => (d.isRandomizedMac || d.category === 'unknown' || d.vendor?.includes('Private')) && d.isThrottled
+  ).length;
+
+  const handleDeepProbeAll = async () => {
+    setIsProbingAll(true);
+    await probeAllDevices();
+    setIsProbingAll(false);
+  };
 
   // Filter devices
   const filteredDevices = React.useMemo(() => {
@@ -144,6 +175,95 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
               <List className="h-3.5 w-3.5" />
             </Button>
           </div>
+
+          {/* Export Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                <Download className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Export</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => exportDevicesToCsv(filteredDevices)}>
+                Export Table as CSV (.csv)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportDevicesToJson(filteredDevices)}>
+                Export Complete Data as JSON (.json)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Anti-Leech / Bandwidth Guard Bar */}
+      <div className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-3.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-subtle">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+            <Shield className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-xs font-semibold text-foreground">Anti-Leech Bandwidth Guard</h4>
+              {throttledUnknownCount > 0 ? (
+                <Badge variant="warning" className="text-[10px] py-0">
+                  {throttledUnknownCount} Active Speed Limits
+                </Badge>
+              ) : (
+                <Badge variant="neutral" className="text-[10px] py-0">
+                  {unknownCount} Private/Randomized Devices
+                </Badge>
+              )}
+            </div>
+            <p className="text-[11px] text-foreground-secondary mt-0.5">
+              Prevent unauthorized streaming and bill spikes. Deep fingerprinter automatically unmasks phone brands without device access.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap self-end md:self-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDeepProbeAll}
+            disabled={isProbingAll}
+            className="h-7 text-xs gap-1.5 border-border bg-card hover:bg-secondary"
+          >
+            <Cpu className={cn('h-3.5 w-3.5 text-primary', isProbingAll && 'animate-spin')} />
+            <span>{isProbingAll ? 'Probing...' : 'Deep Fingerprint All'}</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => throttleUnknownDevices(512, 128)}
+            disabled={unknownCount === 0}
+            className="h-7 text-xs gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+          >
+            <Sliders className="h-3.5 w-3.5" />
+            <span>Throttle Unknown (512k)</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={pauseUnknownDevices}
+            disabled={unknownCount === 0}
+            className="h-7 text-xs gap-1.5 border-rose-500/40 text-rose-600 hover:bg-rose-500/10"
+          >
+            <Pause className="h-3.5 w-3.5" />
+            <span>Freeze Unknown</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={resumeUnknownDevices}
+            className="h-7 text-xs gap-1.5 text-foreground-secondary hover:text-foreground"
+          >
+            <Play className="h-3.5 w-3.5" />
+            <span>Unfreeze</span>
+          </Button>
         </div>
       </div>
 
@@ -270,6 +390,30 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                         <p className="text-[11px] text-foreground-secondary truncate mt-0.5">
                           {dev.vendor} • {dev.category}
                         </p>
+
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                          {dev.fingerprint?.os ? (
+                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium border border-primary/20">
+                              {dev.fingerprint.os}
+                            </span>
+                          ) : dev.isRandomizedMac ? (
+                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-secondary text-foreground-muted border border-border">
+                              Private MAC
+                            </span>
+                          ) : null}
+
+                          {dev.isThrottled && (
+                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium border border-amber-500/30">
+                              🛡️ 512k Cap
+                            </span>
+                          )}
+
+                          {dev.fingerprint?.trafficProfile?.includes('Streaming') && (
+                            <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 font-medium border border-rose-500/30">
+                              ⚠️ Video Stream
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -300,6 +444,9 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                             )}
                             <DropdownMenuItem onClick={() => onSelectDevice(dev.id)}>
                               Quick Inspector (Sidebar)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => probeDevice(dev.id)}>
+                              <Cpu className="h-3 w-3 mr-2 text-primary" /> Run Forensics Probe
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleStartRename(dev)}>
                               Rename Device

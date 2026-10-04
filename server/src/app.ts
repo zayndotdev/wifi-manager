@@ -8,6 +8,8 @@ import apiRouter from './routes/index.js';
 import { errorHandler, notFound } from './middlewares/errorHandler.js';
 import { swaggerDocument } from './docs/swaggerSpec.js';
 
+import { ENV } from './config/env.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const clientDistPath = path.resolve(__dirname, '../../client/dist');
@@ -15,8 +17,27 @@ const clientDistPath = path.resolve(__dirname, '../../client/dist');
 export function createApp() {
   const app = express();
 
+  const allowedOrigins = [
+    ENV.CORS_ORIGIN,
+    'http://localhost:5188',
+    'http://localhost:5173',
+    'http://127.0.0.1:5188',
+    'http://127.0.0.1:5173',
+  ].filter(Boolean);
+
   app.use(cors({
-    origin: '*',
+    origin: (origin, callback) => {
+      // Allow non-browser requests (tools, tests, server-to-server) or same-origin
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      // In development allow any localhost / 127.0.0.1 port
+      if (ENV.NODE_ENV === 'development' && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Blocked by CORS policy for origin: ${origin}`));
+    },
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   }));
 

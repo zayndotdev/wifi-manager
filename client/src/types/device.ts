@@ -43,4 +43,15 @@ export interface Device {
     uploadLimitKbps: number;
   };
   bedtimeScheduleId?: string;
+  fingerprint?: {
+    os?: string;
+    brand?: string;
+    model?: string;
+    trafficProfile?: string;
+    leakedHost?: string;
+    evidence?: string[];
+    openPorts?: number[];
+    banner?: string;
+    lastProbedAt?: string;
+  };
 }

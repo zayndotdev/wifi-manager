@@ -1,11 +1,14 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wifi, ArrowDown, ArrowUp, Pause, Play, Bell, Shield, Terminal } from 'lucide-react';
+import { Wifi, ArrowDown, ArrowUp, Pause, Play, Bell, Shield, Terminal, Search, Lock, Unlock } from 'lucide-react';
 import { useWebSocket } from '../../context/WebSocketContext';
 import { useDevices } from '../../context/DeviceContext';
+import { useAuth } from '../../context/AuthContext';
 import { formatSpeed } from '../../lib/formatters';
 import { ThemePicker } from '../common/ThemePicker';
 import { SystemLoggerDrawer } from '../common/SystemLoggerDrawer';
+import { CommandPalette } from '../common/CommandPalette';
+import { AdminLoginModal } from '../common/AdminLoginModal';
 import { Button } from '../ui/Button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/Tooltip';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/Popover';
@@ -17,9 +20,12 @@ export const TopNavbar: React.FC = () => {
   const navigate = useNavigate();
   const { isConnected, latestTick } = useWebSocket();
   const { devices, pauseAllDevices, resumeAllDevices } = useDevices();
+  const { user, isAuthenticated } = useAuth();
   const [alerts, setAlerts] = React.useState<SecurityAlert[]>([]);
   const [isAlertsOpen, setIsAlertsOpen] = React.useState(false);
   const [isLoggerOpen, setIsLoggerOpen] = React.useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = React.useState(false);
 
   const activeCount = devices.filter((d) => d.status === 'active').length;
   const offlineCount = devices.filter((d) => d.status === 'offline').length;
@@ -94,17 +100,30 @@ export const TopNavbar: React.FC = () => {
           </Tooltip>
         </div>
 
-        {/* Center: Live WAN Speed Ticker */}
-        <div className="hidden md:flex items-center gap-3 px-3 py-1 rounded-md border border-border/80 bg-background/80 text-xs font-mono tabular-nums">
-          <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-            <ArrowDown className="h-3 w-3" />
-            <span>{formatSpeed(latestTick?.wanDownloadBps ?? 0)}</span>
+        {/* Center: Live WAN Speed Ticker + Quick Search Button */}
+        <div className="hidden md:flex items-center gap-2">
+          <div className="flex items-center gap-3 px-3 py-1 rounded-md border border-border/80 bg-background/80 text-xs font-mono tabular-nums">
+            <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+              <ArrowDown className="h-3 w-3" />
+              <span>{formatSpeed(latestTick?.wanDownloadBps ?? 0)}</span>
+            </div>
+            <span className="text-border">|</span>
+            <div className="flex items-center gap-1 text-primary">
+              <ArrowUp className="h-3 w-3" />
+              <span>{formatSpeed(latestTick?.wanUploadBps ?? 0)}</span>
+            </div>
           </div>
-          <span className="text-border">|</span>
-          <div className="flex items-center gap-1 text-primary">
-            <ArrowUp className="h-3 w-3" />
-            <span>{formatSpeed(latestTick?.wanUploadBps ?? 0)}</span>
-          </div>
+
+          <button
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className="flex items-center gap-2 px-2.5 py-1 rounded-md border border-border bg-secondary/50 hover:bg-secondary text-xs text-foreground-muted hover:text-foreground transition-colors cursor-pointer select-none"
+          >
+            <Search className="h-3.5 w-3.5" />
+            <span className="text-xs">Quick search</span>
+            <kbd className="px-1.5 py-0.5 text-[9px] font-mono bg-background border border-border rounded text-foreground-muted">
+              ⌘K
+            </kbd>
+          </button>
         </div>
 
         {/* Right: Actions, Toggles, Alert Bell, Theme Picker */}
@@ -254,6 +273,24 @@ export const TopNavbar: React.FC = () => {
             </TooltipContent>
           </Tooltip>
 
+          {/* Admin Lock / Auth Session Trigger */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsAdminModalOpen(true)}
+                className={`gap-1.5 text-xs ${isAuthenticated ? 'text-emerald-500 font-semibold' : 'text-foreground-secondary'}`}
+              >
+                {isAuthenticated ? <Unlock className="h-3.5 w-3.5 text-emerald-500" /> : <Lock className="h-3.5 w-3.5" />}
+                <span className="hidden xl:inline">{isAuthenticated ? user?.username : 'Admin'}</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span>{isAuthenticated ? `Admin session unlocked (${user?.username})` : 'Log in as Administrator to manage gateway'}</span>
+            </TooltipContent>
+          </Tooltip>
+
           {/* Theme Palette Switcher */}
           <ThemePicker />
         </div>
@@ -261,6 +298,19 @@ export const TopNavbar: React.FC = () => {
 
       {/* Global Real-Time Diagnostics Console Drawer */}
       <SystemLoggerDrawer isOpen={isLoggerOpen} onClose={() => setIsLoggerOpen(false)} />
+
+      {/* Global Command Palette */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onOpenSpeedtest={() => navigate('/settings')}
+      />
+
+      {/* Admin Authentication & Password Modal */}
+      <AdminLoginModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+      />
     </header>
   );
 };

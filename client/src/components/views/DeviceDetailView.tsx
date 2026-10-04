@@ -65,12 +65,16 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
     blockDevice,
     updateNickname,
     updateCategory,
+    probeDevice,
+    throttleDevice,
+    removeThrottle,
   } = useDevices();
   const { toast } = useToast();
 
   const [directDevice, setDirectDevice] = React.useState<Device | null>(null);
   const [isFetchingDirect, setIsFetchingDirect] = React.useState(false);
   const [isLoggerOpen, setIsLoggerOpen] = React.useState(false);
+  const [isProbing, setIsProbing] = React.useState(false);
 
   const matchedDevice = devices.find((d) => d.id === deviceId);
   const device = matchedDevice || directDevice;
@@ -93,7 +97,7 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
   const { addListener } = useWebSocket();
   const [deviceDomains, setDeviceDomains] = React.useState<DomainEvent[]>([]);
   const [isLoadingDomains, setIsLoadingDomains] = React.useState(false);
-  const [activeSubTab, setActiveSubTab] = React.useState<'overview' | 'activity' | 'network' | 'rules'>('overview');
+  const [activeSubTab, setActiveSubTab] = React.useState<'overview' | 'forensics' | 'activity' | 'network' | 'rules'>('overview');
 
   // Load clean user domains (Approach A)
   const fetchDeviceDomains = React.useCallback(async () => {
@@ -261,12 +265,49 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
           <Button
             variant="outline"
             size="sm"
+            disabled={isProbing || isOffline}
+            className="flex-1 sm:flex-none gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+            onClick={async () => {
+              setIsProbing(true);
+              await probeDevice(device.id);
+              setIsProbing(false);
+            }}
+          >
+            <Cpu className={cn('h-3.5 w-3.5', isProbing && 'animate-spin')} />
+            <span>{isProbing ? 'Probing...' : 'Deep Probe'}</span>
+          </Button>
+
+          {device.isThrottled ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 sm:flex-none gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+              onClick={() => removeThrottle(device.id)}
+            >
+              <span>Lift 512k Cap</span>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isOffline}
+              className="flex-1 sm:flex-none gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+              onClick={() => throttleDevice(device.id, 512, 128)}
+            >
+              <Shield className="h-3.5 w-3.5" />
+              <span>Throttle 512k</span>
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
             disabled={isOffline}
             className="flex-1 sm:flex-none gap-1.5"
             onClick={() => onOpenThrottleModal(device)}
           >
             <Sliders className="h-3.5 w-3.5" />
-            <span>Speed Limit</span>
+            <span>Custom Speed</span>
           </Button>
 
           <Button
@@ -398,7 +439,18 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
                 ) : (
                   <Badge variant="online" dot>Online & Active</Badge>
                 )}
-                {device.isThrottled && <Badge variant="throttled">Bandwidth Throttled</Badge>}
+
+                {device.isThrottled && <Badge variant="throttled">Bandwidth Throttled (512k)</Badge>}
+                {device.fingerprint?.os && (
+                  <Badge variant="neutral" className="font-medium">
+                    {device.fingerprint.os}
+                  </Badge>
+                )}
+                {device.fingerprint?.trafficProfile?.includes('Streaming') && (
+                  <Badge variant="blocked" className="font-medium">
+                    ⚠️ High Bill Impact (Video Streaming)
+                  </Badge>
+                )}
                 {device.isRandomizedMac ? (
                   <Badge variant="neutral">Private Randomized MAC</Badge>
                 ) : (
@@ -525,6 +577,23 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
           )}
         >
           Comprehensive Specifications
+        </button>
+        <button
+          onClick={() => setActiveSubTab('forensics')}
+          className={cn(
+            'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors cursor-pointer flex items-center gap-1.5',
+            activeSubTab === 'forensics'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-foreground-secondary hover:text-foreground'
+          )}
+        >
+          <Cpu className="h-3.5 w-3.5" />
+          <span>Forensics & Fingerprint</span>
+          {device.fingerprint?.evidence && device.fingerprint.evidence.length > 0 && (
+            <Badge variant="neutral" className="text-[10px] px-1 py-0">
+              {device.fingerprint.evidence.length}
+            </Badge>
+          )}
         </button>
         <button
           onClick={() => setActiveSubTab('activity')}
@@ -688,6 +757,172 @@ export const DeviceDetailView: React.FC<DeviceDetailViewProps> = ({
               </table>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Sub-Tab: Forensics & Deep Fingerprint */}
+      {activeSubTab === 'forensics' && (
+        <div className="space-y-6">
+          {/* Hero Banner for Forensics */}
+          <Card className="p-6 bg-gradient-to-r from-card via-card to-primary/5 border-primary/20">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Cpu className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Hardware Forensics & Identity Engine
+                  </h3>
+                  <p className="text-xs text-foreground-secondary mt-0.5">
+                    Uncovers actual smartphone brand, operating system, and cloud services without needing device access or Wi-Fi password changes.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={isProbing || isOffline}
+                className="gap-2 shrink-0 bg-primary hover:bg-primary/90 text-white"
+                onClick={async () => {
+                  setIsProbing(true);
+                  await probeDevice(device.id);
+                  setIsProbing(false);
+                }}
+              >
+                <Cpu className={cn('h-4 w-4', isProbing && 'animate-spin')} />
+                <span>{isProbing ? 'Probing Network Ports & Signatures...' : 'Run Deep Forensics Probe'}</span>
+              </Button>
+            </div>
+          </Card>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Identity & Detection Breakdown */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-primary" />
+                  <CardTitle>Fingerprint Parameters</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <table className="w-full text-xs">
+                  <tbody className="divide-y divide-border">
+                    <tr>
+                      <td className="py-2.5 text-foreground-secondary">Detected Brand / Manufacturer</td>
+                      <td className="py-2.5 text-right font-medium text-foreground">
+                        {device.fingerprint?.brand || (device.isRandomizedMac ? 'Smart Device (Randomized MAC)' : device.vendor)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 text-foreground-secondary">Operating System</td>
+                      <td className="py-2.5 text-right font-medium text-foreground">
+                        {device.fingerprint?.os || 'Standard Network OS'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 text-foreground-secondary">Model / Architecture</td>
+                      <td className="py-2.5 text-right font-medium text-foreground">
+                        {device.fingerprint?.model || 'Generic Device'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 text-foreground-secondary">Leaked Hostname / Broadcast Name</td>
+                      <td className="py-2.5 text-right font-mono font-medium text-primary">
+                        {device.fingerprint?.leakedHost || device.hostname || 'None broadcasted'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 text-foreground-secondary">Traffic Profile & Bill Impact</td>
+                      <td className="py-2.5 text-right font-medium">
+                        <span className={cn(
+                          device.fingerprint?.trafficProfile?.includes('Streaming') ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-foreground'
+                        )}>
+                          {device.fingerprint?.trafficProfile || 'Standard Browsing'}
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 text-foreground-secondary">Open Network Ports</td>
+                      <td className="py-2.5 text-right font-mono text-emerald-600 dark:text-emerald-400 font-medium">
+                        {device.fingerprint?.openPorts && device.fingerprint.openPorts.length > 0
+                          ? device.fingerprint.openPorts.join(', ')
+                          : 'Ports closed / Stealth mode'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 text-foreground-secondary">Last Fingerprint Probe</td>
+                      <td className="py-2.5 text-right font-mono text-foreground-muted">
+                        {device.fingerprint?.lastProbedAt ? new Date(device.fingerprint.lastProbedAt).toLocaleString() : 'Not probed yet'}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+
+            {/* Evidence & Anti-Leech Guard Actions */}
+            <div className="space-y-6">
+              {/* Anti-Leech Guard Card */}
+              <Card className="border-amber-500/30 bg-amber-500/5">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="h-4 w-4 text-amber-500" />
+                    <CardTitle>Anti-Leech Data Cap Protection</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-foreground-secondary">
+                    If this phone is consuming large volumes of bandwidth and increasing your ISP bill, you can instantly cap it to 512 Kbps down / 128 Kbps up. This cuts out high-definition video streaming (YouTube, TikTok, Netflix) while preserving basic messaging.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {device.isThrottled ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeThrottle(device.id)}
+                        className="flex-1 text-xs border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                      >
+                        Remove Speed Cap (Restore Full Speed)
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => throttleDevice(device.id, 512, 128)}
+                        className="flex-1 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                      >
+                        🛡️ Apply 512k Anti-Leech Limit
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Forensic Evidence Pills */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Telemetry & Evidence Log</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {device.fingerprint?.evidence && device.fingerprint.evidence.length > 0 ? (
+                    <div className="space-y-2">
+                      {device.fingerprint.evidence.map((ev, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-secondary/50 border border-border">
+                          <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                          <span className="text-foreground font-medium">{ev}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-foreground-muted py-4 text-center">
+                      No passive DNS or port evidence captured yet. Click "Run Deep Forensics Probe" to actively scan this device.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
       )}
 

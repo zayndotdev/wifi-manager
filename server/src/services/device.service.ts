@@ -5,6 +5,8 @@ import { dnsGatewayService } from './dnsGateway.service.js';
 import { routerService } from './router.service.js';
 import { systemLogger } from './systemLogger.service.js';
 import { arpEngineService } from './arpEngine.service.js';
+import { deviceFingerprintService } from './deviceFingerprint.service.js';
+import { telemetryBroadcaster } from '../websocket/telemetryServer.js';
 
 class DeviceService {
   private memoryStore: Map<string, any> = new Map();
@@ -60,6 +62,9 @@ class DeviceService {
       }
     }
     if (list.length === 0) {
+      if (this.memoryStore.size === 0) {
+        await this.rescan();
+      }
       list = Array.from(this.memoryStore.values());
     }
 
@@ -426,6 +431,155 @@ class DeviceService {
 
     systemLogger.hardware('DEVICE', `Global Network Resumed. All paused devices restored to active.`);
     return { action: 'resume_all', resumedDevicesCount: resumedCount };
+  }
+
+  // Active Multi-Port & Deep Forensic Probe for a specific device
+  public async probeDevice(id: string): Promise<any> {
+    const dev = this.memoryStore.get(id);
+    if (!dev) {
+      throw new Error(`Device ${id} not found in store`);
+    }
+
+    if (!dev.ip) {
+      return { device: dev, fingerprint: dev.fingerprint || null };
+    }
+
+    // Run active multi-port banner and service probe
+    const fp = await deviceFingerprintService.probeDevice(dev.ip);
+    if (fp) {
+      dev.fingerprint = fp;
+      if (fp.brand && (dev.vendor === 'Unknown' || dev.vendor === 'Private Wi-Fi Address')) {
+        dev.vendor = `${fp.brand} (${fp.model || 'Device'})`;
+      }
+      if (fp.brand && dev.isRandomizedMac && dev.nickname?.startsWith('Private Smartphone')) {
+        dev.nickname = `${fp.brand} ${fp.model || 'Phone'} (.${dev.ip.split('.')[3]})`;
+      }
+      this.memoryStore.set(id, dev);
+
+      if (isConnectedToMongo) {
+        try {
+          await DeviceModel.updateOne(
+            { id },
+            {
+              $set: {
+                fingerprint: fp,
+                vendor: dev.vendor,
+                nickname: dev.nickname,
+              },
+            }
+          );
+        } catch {
+          // ignore
+        }
+      }
+
+      telemetryBroadcaster.broadcast('device_update', { device: dev });
+      systemLogger.network('DEVICE', `Active probe completed for ${dev.nickname || dev.ip}: Detected ${fp.brand || 'Device'} (${fp.os || 'Unknown OS'}), ${fp.openPorts?.length || 0} open ports.`);
+    }
+
+    return { device: dev, fingerprint: fp };
+  }
+
+  // Probe all reachable devices on the network
+  public async probeAll(): Promise<any> {
+    const all = Array.from(this.memoryStore.values());
+    const candidates = all.filter((d) => d.ip && !d.isHost && d.status !== 'offline');
+
+    const results: any[] = [];
+    const chunkSize = 3;
+    for (let i = 0; i < candidates.length; i += chunkSize) {
+      const chunk = candidates.slice(i, i + chunkSize);
+      const res = await Promise.all(chunk.map((d) => this.probeDevice(d.id).catch(() => null)));
+      results.push(...res.filter(Boolean));
+    }
+
+    return { probedCount: results.length, devices: Array.from(this.memoryStore.values()) };
+  }
+
+  // Anti-Leech / Bandwidth Guard: Caps all unknown or randomized MAC devices to prevent video streaming bill bleed
+  public async throttleUnknown(downloadLimitKbps = 512, uploadLimitKbps = 128): Promise<any> {
+    const all = Array.from(this.memoryStore.values());
+    const unknownDevs = all.filter(
+      (d) =>
+        (d.isRandomizedMac || d.category === 'unknown' || d.vendor?.includes('Private') || d.nickname?.includes('Private')) &&
+        !d.isHost &&
+        !d.isGateway
+    );
+
+    const throttledList: any[] = [];
+    for (const dev of unknownDevs) {
+      await this.throttle(dev.id, downloadLimitKbps, uploadLimitKbps);
+      throttledList.push({ id: dev.id, nickname: dev.nickname, ip: dev.ip });
+    }
+
+    systemLogger.hardware(
+      'THROTTLE',
+      `Anti-Leech Bandwidth Guard ENGAGED: Throttled ${throttledList.length} unknown/randomized devices to ${downloadLimitKbps}k Down / ${uploadLimitKbps}k Up.`
+    );
+
+    return {
+      action: 'throttle_unknown',
+      downloadLimitKbps,
+      uploadLimitKbps,
+      count: throttledList.length,
+      devices: throttledList,
+    };
+  }
+
+  // Anti-Leech / Bandwidth Guard: Instantly freezes internet for all unknown / randomized devices
+  public async pauseUnknown(): Promise<any> {
+    const all = Array.from(this.memoryStore.values());
+    const unknownDevs = all.filter(
+      (d) =>
+        (d.isRandomizedMac || d.category === 'unknown' || d.vendor?.includes('Private') || d.nickname?.includes('Private')) &&
+        !d.isHost &&
+        !d.isGateway &&
+        d.status !== 'paused'
+    );
+
+    const pausedList: any[] = [];
+    for (const dev of unknownDevs) {
+      await this.pause(dev.id);
+      pausedList.push({ id: dev.id, nickname: dev.nickname, ip: dev.ip });
+    }
+
+    systemLogger.hardware(
+      'DEVICE',
+      `Anti-Leech Bandwidth Guard: PAUSED Internet access for ${pausedList.length} unknown/randomized devices.`
+    );
+
+    return {
+      action: 'pause_unknown',
+      count: pausedList.length,
+      devices: pausedList,
+    };
+  }
+
+  // Anti-Leech / Bandwidth Guard: Resumes previously paused unknown devices
+  public async resumeUnknown(): Promise<any> {
+    const all = Array.from(this.memoryStore.values());
+    const pausedUnknownDevs = all.filter(
+      (d) =>
+        (d.isRandomizedMac || d.category === 'unknown' || d.vendor?.includes('Private') || d.nickname?.includes('Private')) &&
+        d.status === 'paused'
+    );
+
+    const resumedList: any[] = [];
+    for (const dev of pausedUnknownDevs) {
+      await this.resume(dev.id);
+      resumedList.push({ id: dev.id, nickname: dev.nickname, ip: dev.ip });
+    }
+
+    systemLogger.hardware(
+      'DEVICE',
+      `Anti-Leech Bandwidth Guard: Restored Internet access for ${resumedList.length} unknown devices.`
+    );
+
+    return {
+      action: 'resume_unknown',
+      count: resumedList.length,
+      devices: resumedList,
+    };
   }
 
   private lastMongoBytesFlush = 0;

@@ -33,24 +33,40 @@ class ScheduleService {
   private async evaluateCurfewRules() {
     const now = new Date();
     const currentDay = now.toLocaleDateString('en-US', { weekday: 'short' }).toLowerCase(); // 'mon', 'tue', etc.
+    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
     const currentHour = now.getHours();
     const currentMin = now.getMinutes();
     const currentMinutes = currentHour * 60 + currentMin;
 
     for (const [id, sch] of this.schedules.entries()) {
-      if (!sch.enabled || !sch.days || !sch.startTime || !sch.endTime) continue;
+      if (!sch.enabled || !sch.startTime || !sch.endTime) continue;
 
-      const appliesToday = sch.days.some(
-        (d: string) => d.toLowerCase().startsWith(currentDay.substring(0, 3))
-      );
+      const targetDeviceIds: string[] = Array.isArray(sch.deviceIds) && sch.deviceIds.length > 0
+        ? sch.deviceIds
+        : sch.deviceId ? [sch.deviceId] : [];
+
+      let appliesToday = false;
+      if (Array.isArray(sch.daysOfWeek) && sch.daysOfWeek.length > 0) {
+        appliesToday = sch.daysOfWeek.includes(dayOfWeek) || sch.daysOfWeek.includes(dayOfWeek === 0 ? 7 : dayOfWeek);
+      } else if (Array.isArray(sch.days) && sch.days.length > 0) {
+        appliesToday = sch.days.some((d: any) => {
+          if (typeof d === 'number') {
+            return d === dayOfWeek || (dayOfWeek === 0 && d === 7);
+          }
+          return String(d).toLowerCase().startsWith(currentDay.substring(0, 3));
+        });
+      } else {
+        // Active every day if no day restriction specified
+        appliesToday = true;
+      }
 
       if (!appliesToday) {
         // Not active today
         if (this.activeCurfews.has(id)) {
           this.activeCurfews.delete(id);
-          if (sch.deviceId) {
-            await deviceService.resume(sch.deviceId);
-            console.log(`[ScheduleService] Bedtime curfew ended for device: ${sch.deviceId}`);
+          for (const devId of targetDeviceIds) {
+            await deviceService.resume(devId);
+            console.log(`[ScheduleService] Bedtime curfew ended for device: ${devId}`);
           }
         }
         continue;
@@ -72,15 +88,15 @@ class ScheduleService {
 
       if (isCurfewActive && !this.activeCurfews.has(id)) {
         this.activeCurfews.add(id);
-        if (sch.deviceId) {
-          await deviceService.pause(sch.deviceId);
-          console.log(`[ScheduleService] Bedtime curfew ENFORCED: physically paused device: ${sch.deviceId}`);
+        for (const devId of targetDeviceIds) {
+          await deviceService.pause(devId);
+          console.log(`[ScheduleService] Bedtime curfew ENFORCED: physically paused device: ${devId}`);
         }
       } else if (!isCurfewActive && this.activeCurfews.has(id)) {
         this.activeCurfews.delete(id);
-        if (sch.deviceId) {
-          await deviceService.resume(sch.deviceId);
-          console.log(`[ScheduleService] Bedtime curfew EXPIRED: physically resumed device: ${sch.deviceId}`);
+        for (const devId of targetDeviceIds) {
+          await deviceService.resume(devId);
+          console.log(`[ScheduleService] Bedtime curfew EXPIRED: physically resumed device: ${devId}`);
         }
       }
     }
@@ -140,8 +156,11 @@ class ScheduleService {
     if (this.activeCurfews.has(id)) {
       this.activeCurfews.delete(id);
       const sch = this.schedules.get(id);
-      if (sch?.deviceId) {
-        await deviceService.resume(sch.deviceId);
+      const targetDeviceIds: string[] = Array.isArray(sch?.deviceIds) && sch.deviceIds.length > 0
+        ? sch.deviceIds
+        : sch?.deviceId ? [sch.deviceId] : [];
+      for (const devId of targetDeviceIds) {
+        await deviceService.resume(devId);
       }
     }
     return this.schedules.delete(id);

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import authRoutes from './auth.routes.js';
 import deviceRoutes from './device.routes.js';
 import trafficRoutes from './traffic.routes.js';
 import scheduleRoutes from './schedule.routes.js';
@@ -8,6 +9,7 @@ import { pauseAll, resumeAll } from '../controllers/device.controller.js';
 
 const apiRouter = Router();
 
+apiRouter.use('/auth', authRoutes);
 apiRouter.use('/devices', deviceRoutes);
 apiRouter.use('/domains', trafficRoutes);
 apiRouter.use('/schedules', scheduleRoutes);

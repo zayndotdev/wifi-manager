@@ -1,19 +1,39 @@
 import mongoose from 'mongoose';
-import { exec, execSync, execFileSync } from 'child_process';
+import { exec, execSync, execFileSync, execFile } from 'child_process';
 import dns from 'dns';
 import dgram from 'dgram';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'util';
 import { createRequire } from 'module';
 import { DeviceModel, IDevice } from '../models/Device.model.js';
 import { isConnectedToMongo } from '../config/database.js';
+import { deviceFingerprintService } from './deviceFingerprint.service.js';
 
 const require = createRequire(import.meta.url);
 const ouiData: Record<string, string> = require('oui-data');
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+// Safe node:sqlite loading across Node 18/20/22/24
+let DatabaseSyncClass: any = null;
+try {
+  const sqliteModule = require('node:sqlite');
+  DatabaseSyncClass = sqliteModule.DatabaseSync || null;
+} catch {
+  DatabaseSyncClass = null;
+}
+
+export function isValidIpv4(ip: string): boolean {
+  if (!ip || typeof ip !== 'string') return false;
+  const parts = ip.trim().split('.');
+  if (parts.length !== 4) return false;
+  return parts.every((p) => {
+    const n = Number(p);
+    return !isNaN(n) && n >= 0 && n <= 255 && String(n) === p;
+  });
+}
 
 export interface RealWifiInfo {
   ssid: string;
@@ -39,6 +59,7 @@ export interface DiscoveredHost {
   nickname: string;
   vendor: string;
   category: 'phone' | 'laptop' | 'tablet' | 'tv' | 'console' | 'iot' | 'audio' | 'printer' | 'unknown';
+  status?: IDevice['status'];
   isRandomizedMac: boolean;
   signalDbm: number;
   estimatedDistanceMeters?: number;
@@ -106,6 +127,21 @@ class RealNetworkService {
       // Ignore
     }
 
+    // Attempt to read the actual default gateway from the OS routing table
+    try {
+      const gwOut = execFileSync(
+        'powershell.exe',
+        ['-NoProfile', '-Command', '(Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop'],
+        { encoding: 'utf-8', timeout: 1500 }
+      );
+      const parsedGw = (gwOut || '').trim();
+      if (isValidIpv4(parsedGw) && parsedGw !== '0.0.0.0') {
+        gatewayIp = parsedGw;
+      }
+    } catch {
+      // Fallback kept
+    }
+
     return {
       ssid,
       bssid: bssid.toUpperCase(),
@@ -124,10 +160,11 @@ class RealNetworkService {
     };
   }
 
-  // 2. Resolve real hostname from router local DNS via nslookup
+  // 2. Resolve real hostname from router local DNS via nslookup (parameterized, injection-safe)
   public async resolveHostDns(ip: string): Promise<string> {
+    if (!isValidIpv4(ip)) return '';
     try {
-      const { stdout } = await execAsync(`nslookup ${ip}`, { timeout: 2000 });
+      const { stdout } = await execFileAsync('nslookup.exe', [ip.trim()], { timeout: 2000 });
       const match = stdout.match(/Name:\s*([^\r\n]+)/i);
       if (match && match[1]) {
         const name = match[1].trim();
@@ -338,6 +375,17 @@ class RealNetworkService {
       if (vendor === 'Unknown') vendor = 'Private Wi-Fi Address';
     }
 
+    const octet = ip.split('.')[3];
+    const fp = deviceFingerprintService.getFingerprint(ip);
+    if (fp) {
+      if (fp.brand && (vendor === 'Unknown' || vendor === 'Private Wi-Fi Address')) {
+        vendor = fp.brand;
+      }
+      if (fp.os?.includes('iOS') || fp.os?.includes('Android')) {
+        category = 'phone';
+      }
+    }
+
     // Generate accurate, human-readable display nickname
     let friendlyName = '';
     if (rawHostname) {
@@ -362,9 +410,10 @@ class RealNetworkService {
         friendlyName = `Samsung ${friendlyName}`;
       }
     } else {
-      const octet = ip.split('.')[3];
       if (isRandomizedMac) {
-        friendlyName = `Private Smartphone (.${octet})`;
+        friendlyName = fp?.brand
+          ? `${fp.brand} ${fp.model || 'Phone'} (.${octet})`
+          : `Private Smartphone (.${octet})`;
       } else if (vendor !== 'Unknown') {
         const shortVendor = vendor.split(/[, ]/)[0];
         friendlyName = `${shortVendor} Client (.${octet})`;
@@ -409,10 +458,11 @@ class RealNetworkService {
     };
   }
 
-  // 4b. Active Live Reachability Probe via fast parallel ICMP ping & RTT measurement
+  // 4b. Active Live Reachability Probe via fast parallel ICMP ping & RTT measurement (injection-safe)
   public async probeHostReachability(ip: string): Promise<{ isAlive: boolean; latencyMs: number }> {
+    if (!isValidIpv4(ip)) return { isAlive: false, latencyMs: 0 };
     try {
-      const { stdout } = await execAsync(`ping -n 1 -w 600 ${ip}`, { timeout: 1200 });
+      const { stdout } = await execFileAsync('ping.exe', ['-n', '1', '-w', '600', ip.trim()], { timeout: 1200 });
       const timeMatch = stdout.match(/time[=<]([0-9]+)ms/i);
       const isAlive = stdout.includes('TTL=') || (timeMatch !== null && !stdout.includes('Destination host unreachable'));
       const latencyMs = timeMatch ? Math.max(1, parseInt(timeMatch[1], 10)) : isAlive ? 2 : 0;
@@ -532,13 +582,14 @@ class RealNetworkService {
         }
       }
 
+      const fp = deviceFingerprintService.getFingerprint(d.ip);
       const updateData: Partial<IDevice> = {
         id: deviceId,
         mac: d.mac,
         ip: d.ip,
         hostname: d.hostname,
         nickname: d.nickname,
-        vendor: d.vendor,
+        vendor: fp?.brand && (d.vendor === 'Unknown' || d.vendor === 'Private Wi-Fi Address') ? `${fp.brand} (${fp.model || 'Device'})` : d.vendor,
         category: d.category,
         status: computedStatus,
         signalDbm,
@@ -554,7 +605,12 @@ class RealNetworkService {
         currentUploadBps: isAlive ? d.currentUploadBps || 0 : 0,
         isRandomizedMac: d.isRandomizedMac,
         isNewDevice: false,
+        fingerprint: fp || undefined,
       };
+
+      if (fp?.brand && d.isRandomizedMac && updateData.nickname?.startsWith('Private Smartphone')) {
+        updateData.nickname = `${fp.brand} ${fp.model || 'Phone'} (.${d.ip.split('.')[3]})`;
+      }
 
       if (isAlive) {
         updateData.lastSeenAt = new Date();
@@ -563,6 +619,11 @@ class RealNetworkService {
       const setOnInsert: any = {
         connectedAt: d.connectedAt || new Date(),
         todayBytesTotal: d.todayBytesTotal || (d.isHost ? 18000000 : isAlive ? 4000000 : 0),
+      };
+
+      const plainDevice: any = {
+        ...setOnInsert,
+        ...updateData,
       };
 
       if (mongoose.connection.readyState === 1 && isConnectedToMongo) {
@@ -575,10 +636,16 @@ class RealNetworkService {
             },
             { upsert: true, new: true }
           );
-          if (doc) resultDevices.push(doc as IDevice);
+          if (doc) {
+            resultDevices.push(doc as IDevice);
+          } else {
+            resultDevices.push(plainDevice as IDevice);
+          }
         } catch {
-          // Skip transient socket reset during background rescan
+          resultDevices.push(plainDevice as IDevice);
         }
+      } else {
+        resultDevices.push(plainDevice as IDevice);
       }
     }
 
@@ -907,9 +974,10 @@ class RealNetworkService {
               `sentinel_hist_${ent.name.replace(/\s+/g, '_')}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.db`
             );
 
+            if (!DatabaseSyncClass) continue;
             try {
               fs.copyFileSync(historyPath, tempFile);
-              const db = new DatabaseSync(tempFile, { open: true, readOnly: true });
+              const db = new DatabaseSyncClass(tempFile, { open: true, readOnly: true });
               const rows = db.prepare(
                 'SELECT url, title, CAST(last_visit_time AS TEXT) as t FROM urls ORDER BY last_visit_time DESC LIMIT 30'
               ).all() as Array<{ url: string; title: string; t: string }>;

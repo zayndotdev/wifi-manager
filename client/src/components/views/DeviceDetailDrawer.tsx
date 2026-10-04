@@ -22,7 +22,11 @@ import {
   Wifi,
   WifiOff,
   ExternalLink,
+  Cpu,
+  ShieldAlert,
+  AlertTriangle,
 } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 export interface DeviceDetailDrawerProps {
   device: Device | null;
@@ -41,8 +45,17 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
   onOpenKickModal,
   onOpenFullDetails,
 }) => {
-  const { pauseDevice, resumeDevice, blockDevice, updateCategory } = useDevices();
+  const {
+    pauseDevice,
+    resumeDevice,
+    blockDevice,
+    updateCategory,
+    probeDevice,
+    throttleDevice,
+    removeThrottle,
+  } = useDevices();
   const [deviceDomains, setDeviceDomains] = React.useState<DomainEvent[]>([]);
+  const [isProbing, setIsProbing] = React.useState(false);
 
   // Fetch recent domains for this specific device
   React.useEffect(() => {
@@ -147,6 +160,132 @@ export const DeviceDetailDrawer: React.FC<DeviceDetailDrawerProps> = ({
             <Sliders className="h-3 w-3" />
             <span>Speed Limit</span>
           </Button>
+        </div>
+
+        {/* Anti-Leech Bill Protection Controls */}
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-amber-500" />
+              <span className="font-semibold text-xs text-foreground">Anti-Leech Bandwidth Guard</span>
+            </div>
+            {device.isThrottled ? (
+              <Badge variant="warning" className="text-[10px] py-0">Throttled (512k/128k)</Badge>
+            ) : (
+              <Badge variant="neutral" className="text-[10px] py-0">Uncapped</Badge>
+            )}
+          </div>
+          <p className="text-[11px] text-foreground-secondary">
+            {device.isThrottled
+              ? 'This device is currently speed-capped at 512 Kbps down / 128 Kbps up. 4K/HD streaming is blocked, preventing bill inflation.'
+              : 'Device has full speed. If this smartphone is running up your bill, apply an instant 512k speed cap.'}
+          </p>
+          <div className="flex items-center gap-2 pt-1">
+            {device.isThrottled ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 h-7 text-xs border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                onClick={() => removeThrottle(device.id)}
+              >
+                Restore Full Bandwidth
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 h-7 text-xs border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                onClick={() => throttleDevice(device.id, 512, 128)}
+              >
+                🛡️ Apply 512k Anti-Leech Cap
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* High Bill Impact Alert */}
+        {(device.todayBytesTotal > 500 * 1024 * 1024 || device.fingerprint?.trafficProfile?.includes('Streaming')) && (
+          <div className="flex items-center gap-2 p-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300 text-[11px]">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
+            <div className="flex-1">
+              <span className="font-semibold block">High Bill Impact Detected</span>
+              <span className="text-[10px] text-foreground-secondary block">
+                {device.fingerprint?.trafficProfile || 'Heavy data usage logged today.'}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Forensic Investigation & Device Fingerprint Card */}
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Cpu className="h-4 w-4 text-primary" />
+              <span className="font-semibold text-xs text-foreground">Forensics & Device Fingerprint</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isProbing || isOffline}
+              className="h-6 text-[10px] gap-1 px-2 border-primary/30 text-primary hover:bg-primary/10"
+              onClick={async () => {
+                setIsProbing(true);
+                await probeDevice(device.id);
+                setIsProbing(false);
+              }}
+            >
+              <Cpu className={cn('h-3 w-3', isProbing && 'animate-spin')} />
+              <span>{isProbing ? 'Probing...' : 'Deep Probe'}</span>
+            </Button>
+          </div>
+
+          <div className="divide-y divide-border/40 text-[11px]">
+            <div className="flex justify-between py-1">
+              <span className="text-foreground-muted">Detected Brand</span>
+              <span className="font-medium text-foreground">{device.fingerprint?.brand || (device.isRandomizedMac ? 'Smart Device (Random MAC)' : device.vendor)}</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-foreground-muted">Operating System</span>
+              <span className="font-medium text-foreground">{device.fingerprint?.os || 'Standard Network OS'}</span>
+            </div>
+            {device.fingerprint?.model && (
+              <div className="flex justify-between py-1">
+                <span className="text-foreground-muted">Model / Architecture</span>
+                <span className="font-medium text-foreground">{device.fingerprint.model}</span>
+              </div>
+            )}
+            {device.fingerprint?.leakedHost && (
+              <div className="flex justify-between py-1">
+                <span className="text-foreground-muted">Leaked Broadcast Name</span>
+                <span className="font-mono text-primary font-medium">{device.fingerprint.leakedHost}</span>
+              </div>
+            )}
+            <div className="flex justify-between py-1">
+              <span className="text-foreground-muted">Traffic Behavior</span>
+              <span className="font-medium text-foreground">{device.fingerprint?.trafficProfile || 'Standard Browsing'}</span>
+            </div>
+            {device.fingerprint?.openPorts && device.fingerprint.openPorts.length > 0 && (
+              <div className="flex justify-between py-1">
+                <span className="text-foreground-muted">Open Network Ports</span>
+                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-medium">
+                  {device.fingerprint.openPorts.join(', ')}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {device.fingerprint?.evidence && device.fingerprint.evidence.length > 0 && (
+            <div className="pt-1.5 border-t border-border/40">
+              <span className="text-[10px] text-foreground-muted block mb-1">Fingerprint Evidence:</span>
+              <div className="flex flex-wrap gap-1">
+                {device.fingerprint.evidence.map((ev, i) => (
+                  <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-card text-foreground-secondary border border-border">
+                    • {ev}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Real-time Speeds & Data */}

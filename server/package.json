@@ -7,7 +7,7 @@
     "dev": "nodemon",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "node --test tests/**/*.test.js || tsx tests/run-tests.ts"
+    "test": "tsx tests/run-tests.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

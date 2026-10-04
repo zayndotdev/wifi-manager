@@ -16,9 +16,11 @@ import {
   Globe,
   Info,
   Lock,
+  Download,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { isUserFacingDomain } from '../../lib/domainFilter';
+import { exportActivityToCsv } from '../../lib/exportUtils';
 
 export const ActivityView: React.FC = () => {
   const [domains, setDomains] = React.useState<DomainEvent[]>([]);
@@ -154,15 +156,28 @@ export const ActivityView: React.FC = () => {
             ))}
           </div>
 
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={fetchDomains}
-            isLoading={isLoading}
-            className="shrink-0"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportActivityToCsv(filteredDomains)}
+              disabled={filteredDomains.length === 0}
+              className="h-8 gap-1.5 text-xs"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Export CSV</span>
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={fetchDomains}
+              isLoading={isLoading}
+              className="shrink-0"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
 

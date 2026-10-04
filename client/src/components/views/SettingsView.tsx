@@ -23,6 +23,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   Zap,
+  Upload,
+  PieChart,
+  Database,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -68,9 +71,28 @@ export const SettingsView: React.FC = () => {
     uptimeSeconds: 0,
   });
 
+  // Bandwidth Quota State
+  const [quotaCapGb, setQuotaCapGb] = React.useState(1000);
+  const [quotaCycleDay, setQuotaCycleDay] = React.useState(1);
+  const [isSavingQuota, setIsSavingQuota] = React.useState(false);
+
+  // Admin Password Management State
+  const [currentAdminPass, setCurrentAdminPass] = React.useState('');
+  const [newAdminPass, setNewAdminPass] = React.useState('');
+  const [confirmAdminPass, setConfirmAdminPass] = React.useState('');
+  const [isChangingPass, setIsChangingPass] = React.useState(false);
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
   React.useEffect(() => {
     api.getMeshNodes().then(setMeshNodes).catch(() => {});
     api.getArpStatus().then(setArpStatus).catch(() => {});
+    api.getBandwidthQuota().then((q) => {
+      if (q) {
+        if (q.monthlyCapGb) setQuotaCapGb(q.monthlyCapGb);
+        if (q.billingCycleStartDay) setQuotaCycleDay(q.billingCycleStartDay);
+      }
+    }).catch(() => {});
     api
       .getRouterConfig()
       .then((cfg) => {
@@ -170,25 +192,84 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleExportBackup = () => {
-    const backupData = {
-      version: '2.4.1',
-      exportedAt: new Date().toISOString(),
-      network: 'Enterprise Wi-Fi Sentinel',
-      meshNodes,
-      routerConfig: {
-        ip: routerIp,
-        model: 'ZTE TEWA-220G',
-        enforcementMode,
-      },
-    };
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sentinel-config-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    toast({ type: 'success', title: 'Backup Downloaded' });
+  const handleSaveQuota = async () => {
+    setIsSavingQuota(true);
+    try {
+      await api.updateBandwidthQuota({
+        monthlyCapGb: Number(quotaCapGb),
+        billingCycleStartDay: Number(quotaCycleDay),
+      });
+      toast({
+        type: 'success',
+        title: 'Quota Policy Updated',
+        description: `Monthly cap set to ${quotaCapGb} GB (resets day ${quotaCycleDay}).`,
+      });
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Failed to update quota', description: err.message });
+    } finally {
+      setIsSavingQuota(false);
+    }
+  };
+
+  const handleExportBackup = async () => {
+    try {
+      const backupData = await api.exportBackup();
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sentinel-system-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      toast({ type: 'success', title: 'Backup Exported', description: 'Complete system snapshot downloaded.' });
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Export Failed', description: err.message });
+    }
+  };
+
+  const handleRestoreBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const bundle = JSON.parse(text);
+      const res = await api.restoreBackup(bundle);
+      toast({ type: 'success', title: 'System Restored', description: res.message || 'Settings restored successfully.' });
+      api.getRouterConfig().then((cfg) => {
+        if (cfg) {
+          if (cfg.ip) setRouterIp(cfg.ip);
+          if (cfg.username) setRouterUser(cfg.username);
+          if (cfg.enforcementMode) setEnforcementMode(cfg.enforcementMode);
+        }
+      }).catch(() => {});
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Restore Failed', description: err.message || 'Invalid backup JSON file' });
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newAdminPass !== confirmAdminPass) {
+      toast({ type: 'error', title: 'Mismatch', description: 'New passwords do not match' });
+      return;
+    }
+    if (newAdminPass.length < 6) {
+      toast({ type: 'error', title: 'Weak Password', description: 'Password must be at least 6 characters' });
+      return;
+    }
+    setIsChangingPass(true);
+    try {
+      await api.changePassword(currentAdminPass, newAdminPass);
+      toast({ type: 'success', title: 'Password Changed', description: 'Admin credentials updated successfully' });
+      setCurrentAdminPass('');
+      setNewAdminPass('');
+      setConfirmAdminPass('');
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Update Failed', description: err.message || 'Invalid current password' });
+    } finally {
+      setIsChangingPass(false);
+    }
   };
 
   return (
@@ -615,12 +696,171 @@ export const SettingsView: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* 4. Maintenance & Backup */}
+      {/* 4. ISP Bandwidth Cap & Quota Policy */}
       <Card>
         <CardHeader>
-          <CardTitle>Gateway Administration & Backup</CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <PieChart className="h-4 w-4 text-primary" />
+                <CardTitle>ISP Bandwidth Cap & Quota Policy</CardTitle>
+              </div>
+              <p className="text-xs text-foreground-muted mt-0.5">
+                Set monthly ISP data caps and billing cycle renewal days to prevent ISP overage fees.
+              </p>
+            </div>
+            <Badge variant="neutral" className="text-xs">Data Control</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] font-semibold text-foreground-secondary block mb-1">
+                Monthly Data Cap (GB)
+              </label>
+              <Input
+                type="number"
+                min="10"
+                max="50000"
+                value={quotaCapGb}
+                onChange={(e) => setQuotaCapGb(Number(e.target.value))}
+                className="h-8 text-xs font-mono"
+              />
+              <span className="text-[10px] text-foreground-muted block mt-1">
+                Alerts trigger at 90% threshold.
+              </span>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-foreground-secondary block mb-1">
+                Billing Cycle Reset Day of Month (1 - 28)
+              </label>
+              <Input
+                type="number"
+                min="1"
+                max="28"
+                value={quotaCycleDay}
+                onChange={(e) => setQuotaCycleDay(Number(e.target.value))}
+                className="h-8 text-xs font-mono"
+              />
+              <span className="text-[10px] text-foreground-muted block mt-1">
+                Day of each month when byte counters reset to 0.
+              </span>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-border flex justify-end">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSaveQuota}
+              isLoading={isSavingQuota}
+              className="gap-1.5"
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span>Save Quota Policy</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 5. Admin Security & Access Control */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-primary" />
+                <CardTitle>Admin Access & Authentication</CardTitle>
+              </div>
+              <p className="text-xs text-foreground-muted mt-0.5">
+                Update Sentinel administration credentials and JWT session security.
+              </p>
+            </div>
+            <Badge variant="online" className="text-xs">Role: Admin</Badge>
+          </div>
         </CardHeader>
         <CardContent>
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-foreground-secondary block mb-1">
+                  Current Password
+                </label>
+                <Input
+                  type="password"
+                  value={currentAdminPass}
+                  onChange={(e) => setCurrentAdminPass(e.target.value)}
+                  placeholder="••••••••"
+                  className="h-8 text-xs font-mono"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-foreground-secondary block mb-1">
+                  New Password
+                </label>
+                <Input
+                  type="password"
+                  value={newAdminPass}
+                  onChange={(e) => setNewAdminPass(e.target.value)}
+                  placeholder="Min 6 characters"
+                  className="h-8 text-xs font-mono"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-foreground-secondary block mb-1">
+                  Confirm New Password
+                </label>
+                <Input
+                  type="password"
+                  value={confirmAdminPass}
+                  onChange={(e) => setConfirmAdminPass(e.target.value)}
+                  placeholder="••••••••"
+                  className="h-8 text-xs font-mono"
+                  required
+                />
+              </div>
+            </div>
+            <div className="pt-2 border-t border-border flex justify-end">
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                isLoading={isChangingPass}
+                className="gap-1.5"
+              >
+                <Lock className="h-3.5 w-3.5" />
+                <span>Update Admin Password</span>
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* 6. System Backup & Restore */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <Database className="h-4 w-4 text-primary" />
+                <CardTitle>System Configuration Backup & Restore</CardTitle>
+              </div>
+              <p className="text-xs text-foreground-muted mt-0.5">
+                Export and restore the complete system state including device nicknames, access rules, alerts, and router settings.
+              </p>
+            </div>
+            <Badge variant="neutral" className="text-xs">JSON Snapshot</Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={handleRestoreBackup}
+            className="hidden"
+          />
           <div className="flex flex-wrap gap-3">
             <Button variant="secondary" size="sm" onClick={handleExportBackup} className="gap-1.5">
               <Download className="h-3.5 w-3.5" />
@@ -628,6 +868,15 @@ export const SettingsView: React.FC = () => {
             </Button>
             <Button
               variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="gap-1.5"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              <span>Restore Backup (JSON)</span>
+            </Button>
+            <Button
+              variant="ghost"
               size="sm"
               onClick={() =>
                 toast({
@@ -639,7 +888,7 @@ export const SettingsView: React.FC = () => {
               className="gap-1.5"
             >
               <Shield className="h-3.5 w-3.5" />
-              <span>Check Firmware Updates</span>
+              <span>Check Updates</span>
             </Button>
           </div>
         </CardContent>

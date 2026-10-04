@@ -11,6 +11,8 @@ import { formatBytes, formatSpeed } from '../../lib/formatters';
 import { api } from '../../lib/api';
 import { DomainEvent } from '../../types/traffic';
 import { isUserFacingDomain } from '../../lib/domainFilter';
+import { LiveSpeedChart } from '../ui/LiveSpeedChart';
+import { SpeedtestWidget } from '../features/SpeedtestWidget';
 import {
   Wifi,
   ArrowDown,
@@ -21,6 +23,8 @@ import {
   Play,
   ExternalLink,
   RefreshCw,
+  Gauge,
+  PieChart,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -38,8 +42,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   const { devices, pauseDevice, resumeDevice, isScanning, scanNetwork } = useDevices();
   const { latestTick, addListener } = useWebSocket();
   const [recentDomains, setRecentDomains] = React.useState<DomainEvent[]>([]);
+  const [quota, setQuota] = React.useState<any>(null);
+  const [showSpeedtest, setShowSpeedtest] = React.useState(false);
 
-  // Fetch recent domains
+  // Fetch recent domains & bandwidth quota
   React.useEffect(() => {
     api
       .getRecentDomains('all')
@@ -47,6 +53,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         const clean = (res?.domains || []).filter((d) => isUserFacingDomain(d.domain));
         setRecentDomains(clean.slice(0, 5));
       })
+      .catch(() => {});
+
+    api
+      .getBandwidthQuota()
+      .then(setQuota)
       .catch(() => {});
   }, []);
 
@@ -138,6 +149,89 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           icon={<HardDrive className="h-4 w-4" />}
         />
       </div>
+
+      {/* Live WAN Bandwidth Stream & ISP Quota Tracker */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Real-Time Speed Chart (8 columns) */}
+        <div className="lg:col-span-8">
+          <Card className="p-4 sm:p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div>
+                <h3 className="font-semibold text-sm sm:text-base text-foreground flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Live Hardware WAN Telemetry
+                </h3>
+                <p className="text-xs text-foreground-muted">Continuous 1-second packet counter delta from network interface</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSpeedtest(!showSpeedtest)}
+                className="h-8 gap-1.5 text-xs self-start sm:self-auto"
+              >
+                <Gauge className="h-3.5 w-3.5 text-primary" />
+                {showSpeedtest ? 'Hide Speedtest' : 'Run Speedtest'}
+              </Button>
+            </div>
+
+            <LiveSpeedChart
+              currentDownloadBps={latestTick?.wanDownloadBps ?? 0}
+              currentUploadBps={latestTick?.wanUploadBps ?? 0}
+              height={140}
+            />
+          </Card>
+        </div>
+
+        {/* ISP Monthly Data Cap & Quota (4 columns) */}
+        <div className="lg:col-span-4">
+          <Card className="p-4 sm:p-5 h-full flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <PieChart className="w-4 h-4 text-primary" />
+                  <h3 className="font-semibold text-sm text-foreground">Monthly ISP Quota</h3>
+                </div>
+                <Badge variant={quota?.isNearCap ? 'warning' : 'neutral'}>
+                  {quota?.isNearCap ? 'Near Cap' : 'Optimal'}
+                </Badge>
+              </div>
+
+              <div className="my-3">
+                <div className="flex items-baseline justify-between text-xs mb-1.5">
+                  <span className="text-foreground font-semibold text-lg sm:text-xl tabular-nums">
+                    {quota?.usedGb ?? '48.2'} <span className="text-xs text-foreground-muted font-normal">/ {quota?.monthlyCapGb ?? 1000} GB</span>
+                  </span>
+                  <span className="font-semibold text-foreground text-xs tabular-nums">
+                    {quota?.percentUsed ?? 4.8}%
+                  </span>
+                </div>
+
+                <div className="w-full bg-secondary h-2.5 rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-500',
+                      quota?.isNearCap ? 'bg-amber-500' : 'bg-primary'
+                    )}
+                    style={{ width: `${Math.min(100, quota?.percentUsed ?? 5)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border/60 text-xs text-foreground-muted flex items-center justify-between">
+              <span>{quota?.remainingGb ?? 951.8} GB left</span>
+              <span>{quota?.daysRemaining ?? 26} days until reset</span>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Expandable Diagnostic Speedtest */}
+      {showSpeedtest && (
+        <div className="animate-fade-in">
+          <SpeedtestWidget />
+        </div>
+      )}
 
       {/* Two Column Section: Live Top Consumers & Real-Time Visited Domains */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

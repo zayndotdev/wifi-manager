@@ -1,4 +1,5 @@
 import * as React from 'react';
+import * as ReactDOM from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -29,7 +30,7 @@ export const Drawer: React.FC<DrawerProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  return ReactDOM.createPortal(
     <div className="fixed inset-0 z-50 overflow-hidden pointer-events-none">
       {/* Backdrop */}
       <div
@@ -75,6 +76,7 @@ export const Drawer: React.FC<DrawerProps> = ({
           {children}
         </div>
       </aside>
-    </div>
+    </div>,
+    document.body
   );
 };

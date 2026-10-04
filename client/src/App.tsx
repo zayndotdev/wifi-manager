@@ -13,6 +13,7 @@ import { ToastProvider } from './components/ui/Toast';
 import { WebSocketProvider } from './context/WebSocketContext';
 import { DeviceProvider, useDevices } from './context/DeviceContext';
 import { TooltipProvider } from './components/ui/Tooltip';
+import { AuthProvider } from './context/AuthContext';
 import { AppShell } from './components/layout/AppShell';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LoadingFallback } from './components/common/LoadingFallback';
@@ -195,15 +196,17 @@ export const App: React.FC = () => {
     <ErrorBoundary>
       <ThemeProvider>
         <ToastProvider>
-          <WebSocketProvider>
-            <DeviceProvider>
-              <TooltipProvider>
-                <BrowserRouter>
-                  <AppContent />
-                </BrowserRouter>
-              </TooltipProvider>
-            </DeviceProvider>
-          </WebSocketProvider>
+          <AuthProvider>
+            <WebSocketProvider>
+              <DeviceProvider>
+                <TooltipProvider>
+                  <BrowserRouter>
+                    <AppContent />
+                  </BrowserRouter>
+                </TooltipProvider>
+              </DeviceProvider>
+            </WebSocketProvider>
+          </AuthProvider>
         </ToastProvider>
       </ThemeProvider>
     </ErrorBoundary>

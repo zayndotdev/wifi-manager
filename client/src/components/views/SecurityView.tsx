@@ -18,16 +18,23 @@ import {
 
 export const SecurityView: React.FC = () => {
   const [alerts, setAlerts] = React.useState<SecurityAlert[]>([]);
+  const [audit, setAudit] = React.useState<any>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [blockDoh, setBlockDoh] = React.useState(true);
   const [isolateGuests, setIsolateGuests] = React.useState(true);
+  const [blockMalware, setBlockMalware] = React.useState(true);
+  const [blockCrypto, setBlockCrypto] = React.useState(true);
   const { toast } = useToast();
 
   const fetchAlerts = React.useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await api.getAlerts();
+      const [data, auditData] = await Promise.all([
+        api.getAlerts(),
+        api.getWifiSecurityAudit().catch(() => null),
+      ]);
       setAlerts(data);
+      if (auditData) setAudit(auditData);
     } catch {
       // ignore
     } finally {
@@ -88,6 +95,92 @@ export const SecurityView: React.FC = () => {
               </span>
             </div>
             <Switch checked={isolateGuests} onCheckedChange={setIsolateGuests} />
+          </div>
+        </Card>
+      </div>
+
+      {/* Wi-Fi Radio Security & Perimeter Audit */}
+      {audit && (
+        <Card className="p-5 border-border bg-card/70">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4 pb-4 border-b border-border">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-500">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-base text-foreground">Local Wi-Fi Security Audit</h3>
+                  <Badge variant="online">{audit.rating || 'Grade A - Secure'}</Badge>
+                </div>
+                <p className="text-xs text-foreground-muted mt-0.5">
+                  Inspection of SSID &quot;{audit.ssid}&quot; encryption standards and access point perimeter
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 self-stretch md:self-auto justify-between md:justify-end">
+              <div className="text-right">
+                <span className="text-xs text-foreground-muted block">Security Score</span>
+                <span className="text-2xl font-bold text-emerald-500 tabular-nums">{audit.securityScore}/100</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs mb-4">
+            <div className="p-3 rounded-lg border border-border bg-card/60">
+              <span className="text-foreground-muted block mb-1">Encryption Protocol</span>
+              <span className="font-semibold text-foreground">{audit.securityStandard}</span>
+            </div>
+            <div className="p-3 rounded-lg border border-border bg-card/60">
+              <span className="text-foreground-muted block mb-1">WPS Vulnerability</span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">{audit.wpsStatus}</span>
+            </div>
+            <div className="p-3 rounded-lg border border-border bg-card/60">
+              <span className="text-foreground-muted block mb-1">Radio Standard</span>
+              <span className="font-semibold text-foreground">{audit.radioType} ({audit.band})</span>
+            </div>
+            <div className="p-3 rounded-lg border border-border bg-card/60">
+              <span className="text-foreground-muted block mb-1">RF Interference</span>
+              <span className="font-semibold text-foreground">{audit.channelInterference}</span>
+            </div>
+          </div>
+
+          {Array.isArray(audit.recommendations) && audit.recommendations.length > 0 && (
+            <div className="p-3 rounded-lg bg-secondary/40 border border-border text-xs">
+              <span className="font-semibold text-foreground block mb-1">Security Posture Recommendations:</span>
+              <ul className="list-disc list-inside space-y-0.5 text-foreground-secondary">
+                {audit.recommendations.map((rec: string, i: number) => (
+                  <li key={i}>{rec}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Threat Feeds Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-semibold text-foreground block">StevenBlack Malware Host Shield</span>
+              <span className="text-[11px] text-foreground-secondary">
+                Sinkhole malicious phishing and botnet domains
+              </span>
+            </div>
+            <Switch checked={blockMalware} onCheckedChange={setBlockMalware} />
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-semibold text-foreground block">Cryptomining & Abuse Interceptor</span>
+              <span className="text-[11px] text-foreground-secondary">
+                Drop in-browser mining and known telemetry trackers
+              </span>
+            </div>
+            <Switch checked={blockCrypto} onCheckedChange={setBlockCrypto} />
           </div>
         </Card>
       </div>

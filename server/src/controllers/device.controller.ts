@@ -148,3 +148,52 @@ export const scanDevices = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+export const probeDeviceHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const result = await deviceService.probeDevice(id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const probeAllHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await deviceService.probeAll();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const throttleUnknownHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const downloadLimit = Number(req.body.downloadLimitKbps) || 512;
+    const uploadLimit = Number(req.body.uploadLimitKbps) || 128;
+    const result = await deviceService.throttleUnknown(downloadLimit, uploadLimit);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const pauseUnknownHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await deviceService.pauseUnknown();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const resumeUnknownHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await deviceService.resumeUnknown();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+

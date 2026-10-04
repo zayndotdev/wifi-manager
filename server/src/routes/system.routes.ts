@@ -10,6 +10,14 @@ import {
   clearSystemLogs,
   getArpEngineStatus,
   triggerNpcapInstaller,
+  getSpeedtestPing,
+  getSpeedtestDownload,
+  postSpeedtestUpload,
+  exportSystemBackup,
+  restoreSystemBackup,
+  getWifiSecurityAudit,
+  getBandwidthQuota,
+  updateBandwidthQuota,
 } from '../controllers/system.controller.js';
 
 const router = Router();
@@ -33,5 +41,21 @@ router.delete('/logs', clearSystemLogs);
 // SaaS Autonomous Layer 2 ARP Engine
 router.get('/arp/status', getArpEngineStatus);
 router.post('/arp/install-driver', triggerNpcapInstaller);
+
+// Diagnostic Speedtest API
+router.get('/speedtest/ping', getSpeedtestPing);
+router.get('/speedtest/download', getSpeedtestDownload);
+router.post('/speedtest/upload', postSpeedtestUpload);
+
+// System Configuration Backup & Restore
+router.get('/backup', exportSystemBackup);
+router.post('/restore', restoreSystemBackup);
+
+// Wi-Fi Security Audit
+router.get('/audit', getWifiSecurityAudit);
+
+// Bandwidth Quota Tracker
+router.get('/quota', getBandwidthQuota);
+router.post('/quota', updateBandwidthQuota);
 
 export default router;

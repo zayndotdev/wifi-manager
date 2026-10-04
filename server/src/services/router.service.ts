@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { RouterConfigModel, IRouterConfig } from '../models/RouterConfig.model.js';
 import { isConnectedToMongo } from '../config/database.js';
 import { systemLogger } from './systemLogger.service.js';
+import { realNetworkService } from './realNetwork.service.js';
 
 export interface RouterStatus {
   ip: string;
@@ -55,8 +56,14 @@ class RouterService {
   private blockedMacs: Set<string> = new Set();
 
   constructor() {
+    let detectedGateway = '192.168.1.1';
+    try {
+      detectedGateway = realNetworkService.getWifiInterfaceInfo().gatewayIp || '192.168.1.1';
+    } catch {
+      // fallback
+    }
     this.config = {
-      ip: '192.168.1.1',
+      ip: detectedGateway,
       model: 'ZTE TEWA-220G',
       username: 'admin',
       password: '',
